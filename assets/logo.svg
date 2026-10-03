@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Hollowtide: a moon cut by the tide line; below the water it's only an outline (hollow) -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d3346"/>
+      <stop offset="1" stop-color="#051520"/>
+    </linearGradient>
+    <clipPath id="above"><path d="M0 0 H512 V256 H428 C412 244 382 244 340 270 C298 296 254 296 212 270 C170 244 126 244 84 270 H0 Z"/></clipPath>
+    <clipPath id="below"><path d="M0 512 V270 H84 C126 244 170 244 212 270 C254 296 298 296 340 270 C382 244 412 244 428 256 H512 V512 Z"/></clipPath>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="256" cy="262" r="124" fill="#e9f6f3" clip-path="url(#above)"/>
+  <circle cx="256" cy="262" r="112" fill="none" stroke="#5fd4c6" stroke-width="22" clip-path="url(#below)"/>
+  <path d="M84 270 C126 244 170 244 212 270 S298 296 340 270 S412 244 428 256" fill="none" stroke="#5fd4c6" stroke-width="22" stroke-linecap="round"/>
+</svg>

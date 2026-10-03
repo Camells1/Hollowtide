@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hollowtide</title>
+  <link rel="icon" href="assets/icon.png" />
+  <meta name="theme-color" content="#051520" />
+  <link rel="stylesheet" href="src/style.css" />
+  <script type="importmap">
+    { "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./vendor/three-addons/" } }
+  </script>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="underwater"></div>
+  <div id="vignette"></div>
+
+  <!-- In-game HUD -->
+  <div id="hud" class="hidden">
+    <div class="tide">
+      <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="tide-bg"/><circle cx="60" cy="60" r="52" class="tide-fg" id="tide-ring"/></svg>
+      <div class="tide-text"><b id="tide-phase">HIGH TIDE</b><span id="tide-left">2:00</span></div>
+    </div>
+    <div class="bars">
+      <div class="bar hp"><i id="bar-hp"></i><span>Health</span></div>
+      <div class="bar air"><i id="bar-air"></i><span>Air</span></div>
+      <div class="bar st"><i id="bar-st"></i><span>Stamina</span></div>
+    </div>
+    <div class="pack"><div class="pack-head">Pack <span id="pack-count">0/15</span></div><div id="pack-items"></div><div class="pack-head bank">Stash <span id="bank-total">0</span></div></div>
+    <div id="markers"></div>
+    <div id="prompt"></div>
+    <div id="channel"><i></i></div>
+    <div id="banner"><b></b><span></span></div>
+    <div id="players"></div>
+    <div id="room-code"></div>
+  </div>
+  <div id="toast"></div>
+  <div id="clickplay">Click to play</div>
+
+  <!-- Title -->
+  <section class="screen on" id="s-title">
+    <div class="title-box">
+      <img class="logo" src="assets/icon.png" alt="" />
+      <h1>HOLLOWTIDE</h1>
+      <p class="tagline">When the tide drains, the ruins are yours for two minutes.</p>
+      <label class="name">Name <input id="name" maxlength="14" spellcheck="false" /></label>
+      <div class="menu">
+        <button class="btn big gold" data-act="solo">Single Player</button>
+        <button class="btn big" data-act="host">Host Co-op</button>
+        <div class="join-row"><input id="join-code" maxlength="5" placeholder="CODE" spellcheck="false" /><button class="btn big" data-act="join">Join Co-op</button></div>
+        <button class="btn" data-act="settings">Settings</button>
+        <button class="btn" data-act="howto">How to Play</button>
+        <button class="btn electron-only" data-act="quit">Quit</button>
+      </div>
+      <div class="studio">A CAMEL STUDIOS GAME · <span id="version"></span></div>
+    </div>
+  </section>
+
+  <!-- How to play -->
+  <section class="screen dim" id="s-howto">
+    <div class="panel">
+      <h2>How to play</h2>
+      <ol class="howto">
+        <li><b>High tide (2 min):</b> you're stuck on the island. Bank your loot at the <b>Stash</b> and buy upgrades at the <b>Workbench</b>.</li>
+        <li><b>The tide goes out:</b> the lagoon drains and the sunken ruins rise out of the water. It gets dark, and the Hollow glows.</li>
+        <li><b>Low tide (2 min):</b> run to the ruins and pry open the glowing chests (hold <kbd>E</kbd>). Watch out for hollow crabs.</li>
+        <li><b>The flood:</b> a horn sounds and the sea rushes back. Swim for the island. The undertow pulls you down, so mind your air.</li>
+        <li>If you drown, your pack drops where you died. Find it next low tide. Only loot in the Stash is safe.</li>
+      </ol>
+      <table class="keys">
+        <tr><td><kbd>WASD</kbd></td><td>Move</td><td><kbd>Mouse</kbd></td><td>Look</td></tr>
+        <tr><td><kbd>Shift</kbd></td><td>Sprint / swim fast</td><td><kbd>Space</kbd></td><td>Jump / swim up</td></tr>
+        <tr><td><kbd>C</kbd></td><td>Dive</td><td><kbd>E</kbd></td><td>Interact / open</td></tr>
+        <tr><td><kbd>Left click</kbd></td><td>Swing blade</td><td><kbd>Esc</kbd></td><td>Pause</td></tr>
+      </table>
+      <button class="btn" data-act="back">Back</button>
+    </div>
+  </section>
+
+  <!-- Co-op lobby (host) -->
+  <section class="screen dim" id="s-lobby">
+    <div class="panel">
+      <h2>Co-op room</h2>
+      <p class="muted">Give your friends this code. They type it next to <b>Join Co-op</b>.</p>
+      <div class="code" id="lobby-code">-----</div>
+      <div id="lobby-players"></div>
+      <button class="btn big gold" data-act="start">Start</button>
+      <button class="btn" data-act="leave">Cancel</button>
+    </div>
+  </section>
+
+  <!-- Workbench -->
+  <section class="screen dim" id="s-bench">
+    <div class="panel wide">
+      <h2>Workbench</h2>
+      <p class="muted">Spend what's in your Stash. <span id="bench-bank"></span></p>
+      <div id="bench-list"></div>
+      <button class="btn" data-act="resume">Done</button>
+    </div>
+  </section>
+
+  <!-- Pause -->
+  <section class="screen dim" id="s-pause">
+    <div class="panel">
+      <h2>Paused</h2>
+      <p class="muted" id="pause-note"></p>
+      <button class="btn big gold" data-act="resume">Resume</button>
+      <button class="btn" data-act="settings">Settings</button>
+      <button class="btn" data-act="leave">Leave to title</button>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <section class="screen dim" id="s-settings">
+    <div class="panel">
+      <h2>Settings</h2>
+      <label class="row">Volume <input type="range" id="set-vol" min="0" max="1" step="0.05" /></label>
+      <label class="row">Mouse sensitivity <input type="range" id="set-sens" min="0.3" max="2.5" step="0.05" /></label>
+      <label class="row">Graphics <select id="set-quality"><option value="low">Low (Chromebooks)</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+      <label class="row check"><input type="checkbox" id="set-invert" /> Invert mouse Y</label>
+      <label class="row">Voice chat <select id="set-voice"><option value="ptt">Push to talk (hold V)</option><option value="open">Open mic</option><option value="off">Off</option></select></label>
+      <button class="btn" data-act="settings-back">Done</button>
+    </div>
+  </section>
+
+  <div id="loading"><img src="assets/icon.png" alt="" /><span>Draining the lagoon…</span></div>
+
+  <script src="node_modules/peerjs/dist/peerjs.min.js"></script>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
