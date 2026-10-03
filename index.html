@@ -15,86 +15,118 @@
   <canvas id="c"></canvas>
   <div id="underwater"></div>
   <div id="vignette"></div>
+  <div id="fade"></div>
 
   <!-- In-game HUD -->
   <div id="hud" class="hidden">
+    <canvas id="compass" width="720" height="56"></canvas>
+    <div id="place"></div>
+
     <div class="tide">
-      <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="tide-bg"/><circle cx="60" cy="60" r="52" class="tide-fg" id="tide-ring"/></svg>
-      <div class="tide-text"><b id="tide-phase">HIGH TIDE</b><span id="tide-left">2:00</span></div>
+      <div class="tide-row"><b id="tide-phase">HIGH TIDE</b><span id="tide-left">2:00</span></div>
+      <svg id="tide-graph" viewBox="0 0 200 40" preserveAspectRatio="none">
+        <path id="tide-fill" /><path id="tide-line" /><line id="tide-now" y1="0" y2="40" /><circle id="tide-dot" r="3.2" />
+      </svg>
+      <div class="tide-next" id="tide-next"></div>
     </div>
-    <div class="bars">
-      <div class="bar hp"><i id="bar-hp"></i><span>Health</span></div>
-      <div class="bar air"><i id="bar-air"></i><span>Air</span></div>
-      <div class="bar st"><i id="bar-st"></i><span>Stamina</span></div>
-    </div>
-    <div class="pack"><div class="pack-head">Pack <span id="pack-count">0/15</span></div><div id="pack-items"></div><div class="pack-head bank">Stash <span id="bank-total">0</span></div></div>
-    <div id="markers"></div>
-    <div id="prompt"></div>
-    <div id="channel"><i></i></div>
-    <div id="banner"><b></b><span></span></div>
     <div id="players"></div>
     <div id="room-code"></div>
+
+    <div class="vitals">
+      <div class="vital hp"><svg viewBox="0 0 24 24"><path d="M12 21C5 15.5 2.5 12.2 2.5 8.6 2.5 6 4.5 4 7 4c1.9 0 3.6 1 5 2.8C13.4 5 15.1 4 17 4c2.5 0 4.5 2 4.5 4.6 0 3.6-2.5 6.9-9.5 12.4z"/></svg><div class="bar"><i id="bar-hp"></i></div></div>
+      <div class="vital air"><svg viewBox="0 0 24 24"><circle cx="9" cy="14" r="5.5"/><circle cx="17.5" cy="7" r="3"/><circle cx="18" cy="17.5" r="1.8"/></svg><div class="bar"><i id="bar-air"></i></div><span id="air-secs"></span></div>
+      <div class="vital st"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg><div class="bar"><i id="bar-st"></i></div></div>
+    </div>
+
+    <div class="pack">
+      <div class="pack-head"><span>Pack</span><b id="pack-count">0/15</b></div>
+      <div class="pack-bar"><i id="pack-fill"></i></div>
+      <div id="pack-items"></div>
+      <div class="pack-head stash"><span>Stash</span><b id="bank-total">0</b></div>
+    </div>
+
+    <div id="crosshair"><svg viewBox="0 0 60 60"><circle class="ring-bg" cx="30" cy="30" r="24"/><circle class="ring" id="ch-ring" cx="30" cy="30" r="24"/></svg><i></i></div>
+    <div id="hitmarker"></div>
+    <div id="prompt"></div>
+    <div id="markers"></div>
+    <div id="banner"><i></i><b></b><span></span><i></i></div>
+    <div id="feed"></div>
+    <div id="hints"><kbd>M</kbd> Map <kbd>F</kbd> Inspect <kbd>G</kbd> Wave</div>
   </div>
+
+  <!-- Map -->
+  <div id="map" class="hidden">
+    <div class="map-frame">
+      <canvas id="map-canvas" width="900" height="900"></canvas>
+      <div class="map-side">
+        <h2>The Lagoon</h2>
+        <p class="muted" id="map-tide"></p>
+        <ul class="legend">
+          <li><i class="lg you"></i> You</li>
+          <li><i class="lg camp"></i> Camp (stash and campfire)</li>
+          <li><i class="lg site"></i> Ruins</li>
+          <li><i class="lg wreck"></i> Shipwreck</li>
+          <li><i class="lg bag"></i> Your dropped pack</li>
+          <li><i class="lg friend"></i> Friends</li>
+        </ul>
+        <p class="muted small">Reach a campfire and you'll wake up there if you drown.</p>
+        <p class="muted small"><kbd>M</kbd> or <kbd>Esc</kbd> to close</p>
+      </div>
+    </div>
+  </div>
+
   <div id="toast"></div>
-  <div id="clickplay">Click to play</div>
+  <div id="clickplay"><span>Click to play</span></div>
+  <div id="death"><b>YOU DROWNED</b><span id="death-sub"></span></div>
 
   <!-- Title -->
   <section class="screen on" id="s-title">
+    <div class="title-shade"></div>
     <div class="title-box">
-      <img class="logo" src="assets/icon.png" alt="" />
-      <h1>HOLLOWTIDE</h1>
-      <p class="tagline">When the tide drains, the ruins are yours for two minutes.</p>
-      <label class="name">Name <input id="name" maxlength="14" spellcheck="false" /></label>
+      <div class="brand"><img class="logo" src="assets/icon.png" alt="" /><div><h1>HOLLOWTIDE</h1><p class="tagline">When the tide drains, the ruins are yours.</p></div></div>
       <div class="menu">
-        <button class="btn big gold" data-act="solo">Single Player</button>
-        <button class="btn big" data-act="host">Host Co-op</button>
-        <div class="join-row"><input id="join-code" maxlength="5" placeholder="CODE" spellcheck="false" /><button class="btn big" data-act="join">Join Co-op</button></div>
-        <button class="btn" data-act="settings">Settings</button>
-        <button class="btn" data-act="howto">How to Play</button>
-        <button class="btn electron-only" data-act="quit">Quit</button>
+        <button class="mbtn primary" data-act="solo"><span>Single Player</span><small>Your own lagoon, saved between sessions</small></button>
+        <button class="mbtn" data-act="host"><span>Host Co-op</span><small>Up to 4 players with voice chat</small></button>
+        <div class="join-row"><input id="join-code" maxlength="5" placeholder="CODE" spellcheck="false" /><button class="mbtn" data-act="join"><span>Join Co-op</span></button></div>
+        <div class="sep"></div>
+        <button class="mbtn slim" data-act="howto"><span>How to Play</span></button>
+        <button class="mbtn slim" data-act="settings"><span>Settings</span></button>
+        <button class="mbtn slim electron-only" data-act="quit"><span>Quit</span></button>
       </div>
-      <div class="studio">A CAMEL STUDIOS GAME · <span id="version"></span></div>
+      <div class="who">
+        <label>Name <input id="name" maxlength="14" spellcheck="false" /></label>
+        <label>Diver <select id="outfit"></select></label>
+      </div>
     </div>
+    <div class="studio">A CAMEL STUDIOS GAME · <span id="version"></span></div>
   </section>
 
   <!-- How to play -->
   <section class="screen dim" id="s-howto">
-    <div class="panel">
+    <div class="panel wide">
       <h2>How to play</h2>
-      <ol class="howto">
-        <li><b>High tide (2 min):</b> you're stuck on the island. Bank your loot at the <b>Stash</b> and buy upgrades at the <b>Workbench</b>.</li>
-        <li><b>The tide goes out:</b> the lagoon drains and the sunken ruins rise out of the water. It gets dark, and the Hollow glows.</li>
-        <li><b>Low tide (2 min):</b> run to the ruins and pry open the glowing chests (hold <kbd>E</kbd>). Watch out for hollow crabs.</li>
-        <li><b>The flood:</b> a horn sounds and the sea rushes back. Swim for the island. The undertow pulls you down, so mind your air.</li>
-        <li>If you drown, your pack drops where you died. Find it next low tide. Only loot in the Stash is safe.</li>
-      </ol>
+      <div class="steps">
+        <div class="step"><b>1</b><h3>High tide</h3><p>You're on an island. Bank loot at the <em>Stash</em> and build upgrades at the <em>Workbench</em>.</p></div>
+        <div class="step"><b>2</b><h3>The tide goes out</h3><p>The sun sets, the lagoon drains and the ruins rise out of the water. Follow the beams of light.</p></div>
+        <div class="step"><b>3</b><h3>Low tide</h3><p>Run to the ruins and pry open the chests (hold <kbd>E</kbd>). Hollow crabs dig out of the sand to stop you.</p></div>
+        <div class="step"><b>4</b><h3>The flood</h3><p>Three bells, then the horn. Get to an island. Drown and your pack stays where you fell.</p></div>
+      </div>
       <table class="keys">
-        <tr><td><kbd>WASD</kbd></td><td>Move</td><td><kbd>Mouse</kbd></td><td>Look</td></tr>
-        <tr><td><kbd>Shift</kbd></td><td>Sprint / swim fast</td><td><kbd>Space</kbd></td><td>Jump / swim up</td></tr>
-        <tr><td><kbd>C</kbd></td><td>Dive</td><td><kbd>E</kbd></td><td>Interact / open</td></tr>
-        <tr><td><kbd>Left click</kbd></td><td>Swing blade</td><td><kbd>Esc</kbd></td><td>Pause</td></tr>
+        <tr><td><kbd>W A S D</kbd></td><td>Move</td><td><kbd>Mouse</kbd></td><td>Look (swim where you look)</td></tr>
+        <tr><td><kbd>Shift</kbd></td><td>Sprint</td><td><kbd>Space</kbd></td><td>Jump, climb ledges, swim up</td></tr>
+        <tr><td><kbd>C</kbd></td><td>Dive</td><td><kbd>E</kbd></td><td>Interact / pry open</td></tr>
+        <tr><td><kbd>Left click</kbd></td><td>Swing your blade</td><td><kbd>M</kbd></td><td>Map</td></tr>
+        <tr><td><kbd>V</kbd></td><td>Talk (co-op)</td><td><kbd>F</kbd> <kbd>G</kbd></td><td>Inspect blade, wave</td></tr>
       </table>
       <button class="btn" data-act="back">Back</button>
-    </div>
-  </section>
-
-  <!-- Co-op lobby (host) -->
-  <section class="screen dim" id="s-lobby">
-    <div class="panel">
-      <h2>Co-op room</h2>
-      <p class="muted">Give your friends this code. They type it next to <b>Join Co-op</b>.</p>
-      <div class="code" id="lobby-code">-----</div>
-      <div id="lobby-players"></div>
-      <button class="btn big gold" data-act="start">Start</button>
-      <button class="btn" data-act="leave">Cancel</button>
     </div>
   </section>
 
   <!-- Workbench -->
   <section class="screen dim" id="s-bench">
     <div class="panel wide">
-      <h2>Workbench</h2>
-      <p class="muted">Spend what's in your Stash. <span id="bench-bank"></span></p>
+      <div class="panel-head"><h2>Workbench</h2><div id="bench-bank"></div></div>
+      <p class="muted">Upgrades are built from what's in your Stash and kept forever.</p>
       <div id="bench-list"></div>
       <button class="btn" data-act="resume">Done</button>
     </div>
@@ -102,10 +134,11 @@
 
   <!-- Pause -->
   <section class="screen dim" id="s-pause">
-    <div class="panel">
+    <div class="panel narrow">
       <h2>Paused</h2>
       <p class="muted" id="pause-note"></p>
       <button class="btn big gold" data-act="resume">Resume</button>
+      <button class="btn" data-act="howto-pause">How to Play</button>
       <button class="btn" data-act="settings">Settings</button>
       <button class="btn" data-act="leave">Leave to title</button>
     </div>
@@ -115,16 +148,19 @@
   <section class="screen dim" id="s-settings">
     <div class="panel">
       <h2>Settings</h2>
-      <label class="row">Volume <input type="range" id="set-vol" min="0" max="1" step="0.05" /></label>
+      <label class="row">Sound volume <input type="range" id="set-vol" min="0" max="1" step="0.05" /></label>
+      <label class="row">Music volume <input type="range" id="set-music" min="0" max="1" step="0.05" /></label>
       <label class="row">Mouse sensitivity <input type="range" id="set-sens" min="0.3" max="2.5" step="0.05" /></label>
+      <label class="row">Field of view <span class="val" id="fov-val"></span><input type="range" id="set-fov" min="60" max="100" step="1" /></label>
       <label class="row">Graphics <select id="set-quality"><option value="low">Low (Chromebooks)</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+      <label class="row check"><input type="checkbox" id="set-bob" /> Head bob</label>
       <label class="row check"><input type="checkbox" id="set-invert" /> Invert mouse Y</label>
       <label class="row">Voice chat <select id="set-voice"><option value="ptt">Push to talk (hold V)</option><option value="open">Open mic</option><option value="off">Off</option></select></label>
       <button class="btn" data-act="settings-back">Done</button>
     </div>
   </section>
 
-  <div id="loading"><img src="assets/icon.png" alt="" /><span>Draining the lagoon…</span></div>
+  <div id="loading" class="on"><img src="assets/icon.png" alt="" /><b>HOLLOWTIDE</b><div class="load-bar"><i id="load-fill"></i></div><span id="load-text">Loading…</span></div>
 
   <script src="node_modules/peerjs/dist/peerjs.min.js"></script>
   <script type="module" src="src/main.js"></script>

@@ -18,12 +18,12 @@ export const WORLD = {
   size: 1500,         // terrain square side
   segments: 500,      // 3 m between terrain samples
   rim: 690,           // where the atoll ring starts
-  sites: 28,
+  sites: 38,
   islands: [
-    { x: 0, z: 0, r: 82, h: 24, name: 'Home Isle', main: true },
-    { x: 330, z: -260, r: 46, h: 14, name: 'Gull Rock' },
-    { x: -400, z: -180, r: 52, h: 16, name: 'Lantern Key' },
-    { x: 60, z: 470, r: 50, h: 15, name: 'Driftwood Cay' }
+    { x: 0, z: 0, r: 82, h: 17, name: 'Home Isle', main: true },
+    { x: 330, z: -260, r: 46, h: 11, name: 'Gull Rock' },
+    { x: -400, z: -180, r: 52, h: 12, name: 'Lantern Key' },
+    { x: 60, z: 470, r: 50, h: 11, name: 'Driftwood Cay' }
   ]
 };
 

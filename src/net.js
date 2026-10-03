@@ -7,7 +7,7 @@ const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ICE = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }, { urls: 'stun:stun.cloudflare.com:3478' }] };
 const TIMEOUT = 10000;
 // Only the host may send these
-const HOST_ONLY = new Set(['welcome', 'tide', 'crabs', 'opened', 'crabDead', 'bite', 'left', 'joined']);
+const HOST_ONLY = new Set(['welcome', 'tide', 'crabs', 'opened', 'crabDead', 'crabHit', 'bite', 'left', 'joined']);
 
 function newPeer(id) {
   return new Promise((resolve, reject) => {

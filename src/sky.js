@@ -49,7 +49,8 @@ export class Sky {
             star *= 0.6 + 0.4 * sin(uTime * (2.0 + r * 9.0) + r * 60.0);
             col += vec3(0.85, 0.9, 1.0) * star * uNight * smoothstep(0.02, 0.25, h) * 2.2;
             // A faint band of the galaxy
-            float band = exp(-pow(dot(d, normalize(vec3(0.3, 0.5, 0.8))) * 3.2, 2.0));
+            float bd = dot(d, normalize(vec3(0.3, 0.5, 0.8))) * 3.2;
+            float band = exp(-bd * bd);
             col += vec3(0.25, 0.3, 0.5) * band * htFbm(d.xz * 9.0 + d.y * 4.0) * 0.18 * uNight * smoothstep(0.0, 0.3, h);
           }
           // Moon with a little surface detail

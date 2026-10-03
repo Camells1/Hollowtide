@@ -18,8 +18,8 @@ export function baseHeight(x, z, seed) {
     const warp = 1 + fbm(Math.cos(a) * 1.3 + is.x * 0.01, Math.sin(a) * 1.3 + is.z * 0.01, seed + 31, 3) * 0.4;
     const d = Math.hypot(dx, dz) / (is.r * warp);
     if (d > 1.8) continue;
-    const land = is.h * Math.pow(Math.max(0, 1 - d), 1.5) + 2.5 * (1 - smooth(0.6, 1.1, d)) - 6 * smooth(0.95, 1.6, d)
-      + fbm(x * 0.04, z * 0.04, seed + 40, 4) * 2.2 * (1 - smooth(0.5, 1.0, d));
+    const land = is.h * Math.pow(Math.max(0, 1 - d * d), 2) + 2.5 * (1 - smooth(0.6, 1.1, d)) - 6 * smooth(0.95, 1.6, d)
+      + (fbm(x * 0.03, z * 0.03, seed + 40, 4) * 4.5 + fbm(x * 0.09, z * 0.09, seed + 44, 3) * 1.2) * (1 - smooth(0.45, 0.95, d));
     h = lerp(land, h, smooth(0.95, 1.7, d));
   }
   // The atoll ring, and the open ocean beyond it
@@ -29,30 +29,51 @@ export function baseHeight(x, z, seed) {
   return h;
 }
 
-const TYPES = ['court', 'wreck', 'temple', 'garden', 'sentinel'];
-export const SITE_NAMES = ['The Drowned Court', 'Saltglass Ring', 'Pillars of Ebb', 'The Moon Steps', 'Tidewarden Hall', 'Shellgate', 'The Hollow Crown',
-  'Gullwing Wreck', 'Coral Cloister', 'Stag of the Shallows', 'The Sunken Choir', 'Brinewatch', 'Kelpfall Garden', 'The Last Galleon',
-  'Foxhollow Shrine', 'Pearlstair', 'Barnacle Basilica', 'The Low Gate', 'Driftmoor', 'Siltspire', 'The Weeping Arch', 'Anchorrest',
-  'Undertow Plaza', "Mariner's Folly", 'The Quiet Altar', 'Lanternfish Court', 'Seaglass Terrace', 'The Old Harbor'];
+const TYPES = ['court', 'wreck', 'ziggurat', 'temple', 'garden', 'amphitheater', 'sentinel', 'henge', 'aqueduct', 'lighthouse'];
+const RADIUS = { city: 46, wreck: 20, ziggurat: 21, amphitheater: 22, henge: 15, aqueduct: 31, lighthouse: 14 };
+const PAVED = new Set(['city', 'court', 'temple', 'sentinel', 'ziggurat', 'amphitheater', 'lighthouse']);
+export const CITY_NAMES = ['Old Vessara', 'The Sunken Quarter', 'Low Marrow'];
+export const SITE_NAMES = ['The Drowned Court', 'Gullwing Wreck', 'The Moon Steps', 'Pillars of Ebb', 'Kelpfall Garden', 'The Sunken Choir', 'Stag of the Shallows',
+  'The Tide Stones', 'The Long Thirst', 'Lastlight', 'Saltglass Ring', 'The Last Galleon', 'Pearlstair', 'Tidewarden Hall', 'Coral Cloister', 'The Quiet Stage',
+  'Foxhollow Shrine', 'Brinewatch Circle', 'The Broken Span', 'Siltspire', 'The Hollow Crown', 'Anchorrest', 'Barnacle Basilica', 'Shellgate', 'Lanternfish Garden',
+  'Undertow Theatre', 'The Weeping Stag', 'Driftmoor Stones', "Mariner's Folly", 'The Low Light', 'Seaglass Terrace', 'The Old Harbor', 'The Quiet Altar'];
 
-// Where the ruin sites are (the same for everyone with the same seed)
+// Where the ruin sites are (the same for everyone with the same seed): three city districts first, then the rest
 export function planSites(seed) {
   const R = rng(seed * 7 + 1), sites = [];
-  for (let tries = 0; sites.length < WORLD.sites && tries < 6000; tries++) {
-    const a = R() * Math.PI * 2, d = 120 + Math.sqrt(R()) * 520, x = Math.cos(a) * d, z = Math.sin(a) * d;
-    if (WORLD.islands.some(is => Math.hypot(x - is.x, z - is.z) < is.r * 1.7 + 25)) continue;
-    if (sites.some(s => Math.hypot(s.x - x, s.z - z) < 78)) continue;
+  for (let tries = 0; sites.length < WORLD.sites && tries < 20000; tries++) {
+    const city = sites.length < CITY_NAMES.length;
+    const type = city ? 'city' : TYPES[(sites.length - CITY_NAMES.length) % TYPES.length], r = RADIUS[type] ?? 17 + R() * 6;
+    const a = R() * Math.PI * 2, d = (city ? 190 : 110) + Math.sqrt(R()) * (city ? 380 : 540), x = Math.cos(a) * d, z = Math.sin(a) * d;
+    if (d + r > WORLD.rim - 45) continue;
+    if (WORLD.islands.some(is => Math.hypot(x - is.x, z - is.z) < is.r * 1.7 + r + 8)) continue;
+    if (sites.some(s => Math.hypot(s.x - x, s.z - z) < s.r + r + (city ? 90 : 32))) continue;
     const h = baseHeight(x, z, seed);
-    if (h < -15 || h > -3) continue;
-    const type = TYPES[sites.length % TYPES.length];
-    sites.push({ x, z, h, type, r: type === 'wreck' ? 20 : 17 + R() * 6, name: SITE_NAMES[sites.length], pave: type !== 'wreck' && type !== 'garden', seed: Math.floor(R() * 1e9) });
+    if (h < -14.5 || h > -3.5) continue;
+    sites.push({ x, z, h, type, r, name: city ? CITY_NAMES[sites.length] : SITE_NAMES[sites.length - CITY_NAMES.length], pave: PAVED.has(type), seed: Math.floor(R() * 1e9) });
   }
   return sites;
+}
+
+// Old stone roads: every site is linked to its nearest already-linked neighbour, starting from Home Isle
+export function planRoads(sites, seed) {
+  const R = rng(seed * 11 + 5), home = WORLD.islands[0];
+  const nodes = [{ x: home.x + home.r * 1.05, z: home.z + home.r * 0.4, r: 0 }], roads = [], left = [...sites];
+  while (left.length) {
+    let best = null;
+    for (const s of left) for (const n of nodes) { const d = Math.hypot(s.x - n.x, s.z - n.z); if (!best || d < best.d) best = { s, n, d }; }
+    left.splice(left.indexOf(best.s), 1); nodes.push(best.s);
+    // A gentle bend in the middle so the roads don't look ruled
+    const mx = (best.s.x + best.n.x) / 2 + (R() - 0.5) * best.d * 0.22, mz = (best.s.z + best.n.z) / 2 + (R() - 0.5) * best.d * 0.22;
+    roads.push([best.n.x, best.n.z, mx, mz], [mx, mz, best.s.x, best.s.z]);
+  }
+  return roads;
 }
 
 export class Terrain {
   constructor(seed, sites, quality = 'medium') {
     this.seed = seed; this.sites = sites;
+    this.roads = planRoads(sites, seed);
     const N = WORLD.segments, S = WORLD.size;
     this.N = N; this.S = S; this.step = S / N;
     // One height grid shared by the mesh and the physics, so your feet always match the ground you see
@@ -69,6 +90,18 @@ export class Terrain {
       }
       const k = j * (N + 1) + i;
       this.h[k] = h; this.pave[k] = pave;
+    }
+    // Paint the roads (only where the seabed is walkable at low tide)
+    for (const [ax, az, bx, bz] of this.roads) {
+      const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - 5 + S / 2) / this.step)), i1 = Math.min(N, Math.ceil((Math.max(ax, bx) + 5 + S / 2) / this.step));
+      const j0 = Math.max(0, Math.floor((Math.min(az, bz) - 5 + S / 2) / this.step)), j1 = Math.min(N, Math.ceil((Math.max(az, bz) + 5 + S / 2) / this.step));
+      const dx = bx - ax, dz = bz - az, len2 = dx * dx + dz * dz || 1;
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const x = -S / 2 + i * this.step, z = -S / 2 + j * this.step, k = j * (N + 1) + i;
+        if (this.h[k] < -17.5 || this.h[k] > 0.5) continue;
+        const t = clamp(((x - ax) * dx + (z - az) * dz) / len2, 0, 1), d = Math.hypot(x - ax - dx * t, z - az - dz * t);
+        this.pave[k] = Math.max(this.pave[k], smooth(4.2, 1.6, d) * 0.9);
+      }
     }
     this.uniforms = { uLevel: { value: 0 }, uTime: { value: 0 }, uCaustic: { value: 1 } };
     this.mesh = this._mesh(quality === 'low' ? 2 : 1);
@@ -151,7 +184,7 @@ vec2 uvS = wuv / 3.5, uvG = wuv / 4.0, uvM = wuv / 5.0, uvP = wuv / 3.0;
 vec3 bw = pow(abs(tn), vec3(4.0)); bw /= (bw.x + bw.y + bw.z);
 vec3 col = texture2D(tSandD, uvS).rgb;
 col = mix(col, texture2D(tMudD, uvM).rgb, gMud);
-col = mix(col, texture2D(tGrassD, uvG).rgb * vec3(0.95, 1.0, 0.85), gGrass);
+col = mix(col, texture2D(tGrassD, uvG).rgb * vec3(0.74, 1.1, 0.58), gGrass);
 col = mix(col, texture2D(tPaveD, uvP).rgb, gPave);
 vec3 cR = texture2D(tRockD, vTW.zy / 7.0).rgb * bw.x + texture2D(tRockD, wuv / 7.0).rgb * bw.y + texture2D(tRockD, vTW.xy / 7.0).rgb * bw.z;
 col = mix(col, cR, gRock);

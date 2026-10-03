@@ -7,7 +7,7 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 export const A = { models: {}, tex: {}, env: null, sounds: {} };
 
-const MODELS = ['adventurer', 'hooded', 'matt', 'crab', 'chest', 'shipwreck', 'ship_small', 'palm1', 'palm2', 'palm3', 'rock1', 'rock2', 'rock_large',
+const MODELS = ['adventurer', 'hooded', 'matt', 'crab', 'chest', 'shipwreck', 'ship_small', 'palm1', 'palm2', 'palm3', 'rock1', 'rock2', 'rocks', 'rock_large', 'ocean_chest',
   'column1', 'column2', 'column_round', 'arch', 'pedestal', 'stag_statue', 'fox_statue', 'seaweed', 'coral', 'fish', 'clownfish', 'bonfire', 'tent', 'barrel', 'anchor', 'dock'];
 // Texture sets: [name, id] (each has _diff, _nor, _rough)
 const TEXTURES = [['sand', 'coast_sand_01'], ['mud', 'coral_mud_01'], ['grass', 'sparse_grass'], ['rock', 'rock_wall_02'],
@@ -52,11 +52,20 @@ export function texMat(name, repeat = 1, extra = {}) {
 export function instance(name, size, by = 'height') {
   const g = A.models[name];
   const obj = (g.animations?.length ? SkeletonUtils.clone(g.scene) : g.scene.clone(true));
-  const box = new THREE.Box3().setFromObject(obj), dim = box.getSize(new THREE.Vector3());
+  // Bones only know where they are after a world-matrix update; without it a rigged model measures wrong
+  obj.updateMatrixWorld(true);
+  obj.traverse(o => { if (o.isSkinnedMesh) { o.boundingBox = null; o.boundingSphere = null; } });
+  let box = new THREE.Box3().setFromObject(obj);
+  if (![box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z].every(Number.isFinite)) {
+    // Some rigs can't be measured through their bones: use the rest-pose shape instead
+    box = new THREE.Box3(); const tmp = new THREE.Box3();
+    obj.traverse(o => { if (!o.isMesh) return; o.geometry.computeBoundingBox(); box.union(tmp.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld)); if (o.isSkinnedMesh) { o.boundingBox = null; o.boundingSphere = null; } });
+  }
+  const dim = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
   const k = size / (by === 'height' ? dim.y : Math.max(dim.x, dim.y, dim.z));
   obj.scale.multiplyScalar(k);
-  const box2 = new THREE.Box3().setFromObject(obj), c = box2.getCenter(new THREE.Vector3());
-  obj.position.set(-c.x, -box2.min.y, -c.z);
+  obj.position.set(-c.x * k, -box.min.y * k, -c.z * k);
+  const box2 = { min: { x: -dim.x * k / 2, y: 0, z: -dim.z * k / 2 }, max: { x: dim.x * k / 2, y: dim.y * k, z: dim.z * k / 2 } };
   const root = new THREE.Group(); root.add(obj);
   root.userData.radius = Math.max(box2.max.x - box2.min.x, box2.max.z - box2.min.z) / 2;
   root.userData.height = box2.max.y - box2.min.y;

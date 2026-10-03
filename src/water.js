@@ -83,7 +83,7 @@ export class Water {
             float depth = max(vW.y - ground, 0.0);
             vec3 col; float alpha;
             if (gl_FrontFacing) {
-              float fres = 0.02 + 0.98 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+              float fres = 0.02 + 0.98 * pow(clamp(1.0 - dot(N, V), 0.0, 1.0), 5.0);
               vec3 R = reflect(-V, N);
               vec3 sky = mix(uHorizon, uZenith, smoothstep(0.0, 0.5, R.y));
               float absorb = 1.0 - exp(-depth * 0.17);
@@ -97,7 +97,7 @@ export class Water {
               float fn = htNoise(p * 0.9 + uTime * vec2(0.3, 0.2)) * 0.6 + htNoise(p * 2.7 - uTime * 0.5) * 0.4;
               float shore = 1.0 - smoothstep(0.0, 1.3, depth);
               float lines = smoothstep(0.6, 0.95, sin(depth * 4.5 - uTime * 2.0) * 0.5 + 0.5) * (1.0 - smoothstep(0.3, 2.6, depth));
-              float crest = smoothstep(0.32, 0.45, vH * uAmp) * 0.5;
+              float crest = smoothstep(0.4, 0.56, vH * uAmp) * 0.35 * step(0.5, htNoise(p * 0.35 + uTime * 0.1));
               float foam = clamp(shore * 0.85 + lines * 0.55 + crest, 0.0, 1.0) * smoothstep(0.25, 0.55, fn + shore * 0.35);
               col = mix(col, vec3(0.93, 0.97, 1.0) * mix(1.0, 0.25, uNight), foam);
               alpha = clamp(mix(0.25, 0.94, absorb) + fres * 0.4 + foam, 0.0, 1.0) * smoothstep(0.0, 0.3, depth);

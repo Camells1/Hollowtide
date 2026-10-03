@@ -37,34 +37,32 @@ function makeHand(sleeveMat, side = 1) {
 }
 
 function makeBlade() {
-  // The sword from the Wanderer model, laid along +Y with the grip at the origin
+  // The sword from the Wanderer model, stood up along +Y with the grip at the origin
   let src = null;
-  A.models.hooded.scene.traverse(n => { if (n.name === 'Sword' && n.isMesh) src = n; });
-  const holder = new THREE.Group();
-  if (!src) return { holder, mats: [], length: 0.8 };
-  const geo = src.geometry.clone(); geo.computeBoundingBox();
-  const s = geo.boundingBox.getSize(new THREE.Vector3()), axis = s.x > s.y && s.x > s.z ? 'x' : s.y > s.z ? 'y' : 'z';
-  const lo = geo.boundingBox.min[axis], hi = geo.boundingBox.max[axis];
-  if (axis === 'x') geo.rotateZ(-Math.PI / 2); else if (axis === 'z') geo.rotateX(Math.PI / 2);
-  geo.computeBoundingBox();
-  const b = geo.boundingBox, len = b.max.y - b.min.y;
-  // The grip is the end nearest the hand bone (the mesh origin)
-  if (Math.abs(hi) < Math.abs(lo)) geo.rotateX(Math.PI);
-  geo.computeBoundingBox();
-  const k = 0.82 / len; geo.scale(k, k, k); geo.computeBoundingBox();
-  const c = geo.boundingBox.getCenter(new THREE.Vector3());
-  geo.translate(-c.x, -geo.boundingBox.min.y - 0.09, -c.z);
-  const mats = (Array.isArray(src.material) ? src.material : [src.material]).map(m => { const c2 = m.clone(); c2.envMapIntensity = 1.4; return c2; });
-  const mesh = new THREE.Mesh(geo, Array.isArray(src.material) ? mats : mats[0]);
-  holder.add(mesh);
-  return { holder, mats, length: 0.82 - 0.09 };
+  A.models.hooded.scene.traverse(n => { if (n.name === 'Sword') src = n; });
+  const holder = new THREE.Group(), mats = [];
+  if (!src) return { holder, mats, length: 0.8 };
+  const obj = src.clone();
+  obj.position.set(0, 0, 0); obj.quaternion.identity(); obj.scale.set(1, 1, 1);
+  const seen = new Map();
+  obj.traverse(m => { if (!m.isMesh) return; if (!seen.has(m.material)) { const c = m.material.clone(); c.envMapIntensity = 0.9; c.color.multiplyScalar(0.8); if (c.metalness > 0.5) c.roughness = Math.max(c.roughness, 0.32); seen.set(m.material, c); mats.push(c); } m.material = seen.get(m.material); m.frustumCulled = false; });
+  const turn = new THREE.Group(), flip = new THREE.Group(); turn.add(obj); flip.add(turn); holder.add(flip);
+  const box = new THREE.Box3().setFromObject(obj), s = box.getSize(new THREE.Vector3());
+  const axis = s.x > s.y && s.x > s.z ? 'x' : s.y > s.z ? 'y' : 'z', len = s[axis];
+  if (axis === 'x') turn.rotation.z = Math.PI / 2; else if (axis === 'z') turn.rotation.x = -Math.PI / 2;
+  // The grip is the end nearest the hand bone (the model's own origin)
+  if (Math.abs(box.max[axis]) < Math.abs(box.min[axis])) flip.rotation.x = Math.PI;
+  flip.scale.setScalar(0.56 / len);
+  const b2 = new THREE.Box3().setFromObject(holder), c = b2.getCenter(new THREE.Vector3());
+  flip.position.set(-c.x, -b2.min.y - 0.07, -c.z);
+  return { holder, mats, length: 0.56 - 0.07 };
 }
 
 function makeLantern() {
   const g = new THREE.Group();
   const add = (geo, mat, y) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; g.add(m); return m; };
   add(new THREE.CylinderGeometry(0.06, 0.07, 0.025, 16), brass, -0.11);
-  const glassMat = new THREE.MeshStandardMaterial({ color: 0xfff1c8, emissive: 0xffb24a, emissiveIntensity: 1.2, transparent: true, opacity: 0.55, roughness: 0.1 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0xffe2a8, emissive: 0xffa030, emissiveIntensity: 1.2, transparent: true, opacity: 0.38, roughness: 0.1, side: THREE.DoubleSide });
   add(new THREE.CylinderGeometry(0.05, 0.05, 0.15, 16, 1, true), glassMat, -0.02);
   for (let i = 0; i < 4; i++) { const bar = add(new THREE.CylinderGeometry(0.004, 0.004, 0.16, 6), brass, -0.02); const a = i / 4 * Math.PI * 2; bar.position.x = Math.cos(a) * 0.052; bar.position.z = Math.sin(a) * 0.052; }
   add(new THREE.ConeGeometry(0.065, 0.06, 16), brass, 0.085);
@@ -88,13 +86,13 @@ export class ViewModel {
     this.right = new THREE.Group(); this.scene.add(this.right);
     this.rHand = makeHand(sleeve, 1); this.right.add(this.rHand);
     const blade = makeBlade(); this.blade = blade.holder; this.bladeMats = blade.mats; this.bladeLen = blade.length;
-    this.blade.position.set(0, -0.005, -0.035); this.rHand.add(this.blade);
+    this.blade.position.set(0, -0.005, -0.035); this.blade.rotation.x = -1.1; this.rHand.add(this.blade);
     this.tip = new THREE.Object3D(); this.tip.position.y = blade.length; this.blade.add(this.tip);
     this.mid = new THREE.Object3D(); this.mid.position.y = blade.length * 0.35; this.blade.add(this.mid);
     // Left hand with the lantern
     this.left = new THREE.Group(); this.scene.add(this.left);
     this.lHand = makeHand(sleeve, -1); this.left.add(this.lHand);
-    this.lantern = makeLantern(); this.lantern.group.position.set(0, -0.15, -0.035); this.lHand.add(this.lantern.group);
+    this.lantern = makeLantern(); this.lantern.group.scale.setScalar(0.62); this.lantern.group.position.set(0, -0.1, -0.035); this.lHand.add(this.lantern.group);
     // Blade trail
     this.trailN = 14;
     this.trailPts = [];
@@ -152,14 +150,14 @@ export class ViewModel {
     const bob = s.speed01 * (1 + this.sprintK * 0.8), ph = s.step;
 
     // ---- right hand
-    const p = this.v.pos.set(0.25, -0.27, -0.46), r = this.v.rot.set(-0.55, 0.1, 0.32);
+    const p = this.v.pos.set(0.27, -0.25, -0.46), r = this.v.rot.set(0.35, 0.3, 0.5);
     p.y += Math.sin(t * 1.6) * 0.004; r.x += Math.sin(t * 1.6) * 0.01;                    // breathing
     p.x += Math.cos(ph) * 0.014 * bob; p.y -= Math.abs(Math.sin(ph)) * 0.016 * bob;     // walk bob
     r.z += Math.cos(ph) * 0.03 * bob;
     p.x += this.sway.x; p.y += this.sway.y; r.y += this.sway.x * 2; r.x += this.sway.y * 1.5;
     p.y += this.land;
     // Sprint: blade held low and back
-    p.y -= 0.06 * this.sprintK; p.x += 0.04 * this.sprintK; r.x -= 0.55 * this.sprintK; r.z += 0.5 * this.sprintK; r.y += 0.25 * this.sprintK;
+    p.y -= 0.07 * this.sprintK; p.x += 0.03 * this.sprintK; r.x += 0.25 * this.sprintK; r.z += 0.75 * this.sprintK; r.y += 0.2 * this.sprintK;
     // Prying a chest: both arms forward and down, straining
     p.y -= 0.1 * this.interactK; p.z -= 0.06 * this.interactK; p.x -= 0.08 * this.interactK;
     r.x -= 0.9 * this.interactK + Math.sin(t * 34) * 0.03 * this.interactK; r.z += 0.4 * this.interactK;
@@ -191,8 +189,9 @@ export class ViewModel {
     const sw = this.swimK;
     this.stroke += dt * (0.8 + s.speed01 * 1.4) * sw;
     const sp = (this.stroke % 1), out = Math.sin(sp * Math.PI), back = ease(clamp(sp * 1.4, 0, 1));
-    p.lerp(new THREE.Vector3(0.08 + out * 0.26, -0.24 + out * 0.04, -0.5 + back * 0.22), sw);
-    r.x = lerp(r.x, -1.2, sw); r.y = lerp(r.y, -0.5 - out * 0.6, sw); r.z = lerp(r.z, -0.3, sw);
+    // Forearms reach forward from below; hands sweep out and back, palms down
+    p.lerp(new THREE.Vector3(0.09 + out * 0.24, -0.2 - out * 0.03, -0.52 + back * 0.2), sw);
+    r.x = lerp(r.x, 0.32, sw); r.y = lerp(r.y, 0.3 + out * 0.55, sw); r.z = lerp(r.z, 1.35, sw);
     // Death and drawing: drop out of view
     p.y -= (this.deadK * 0.6 + draw * 0.45); r.x -= draw * 0.8;
     this.right.position.copy(p); this.right.rotation.copy(r);
@@ -200,13 +199,13 @@ export class ViewModel {
     this.blade.scale.setScalar(1 - clamp((sw - 0.3) * 3, 0, 1) * 0.9);
 
     // ---- left hand: lantern, or the other half of the swim stroke
-    const lp = new THREE.Vector3(-0.27, -0.33, -0.5), lr = new THREE.Euler(0.15, -0.1, 0.1);
+    const lp = new THREE.Vector3(-0.27, -0.07, -0.5), lr = new THREE.Euler(0.15, -0.1, 0.1);
     lp.y += Math.sin(t * 1.6 + 1) * 0.004 + this.land * 0.8 + this.sway.y; lp.x += this.sway.x - Math.cos(ph) * 0.012 * bob;
     lp.y -= Math.abs(Math.sin(ph + 0.6)) * 0.014 * bob;
     lp.y -= (1 - this.lanternK) * 0.35 * (1 - sw);
     lp.y -= this.interactK * 0.05;
-    lp.lerp(new THREE.Vector3(-0.08 - out * 0.26, -0.24 + out * 0.04, -0.5 + back * 0.22), sw);
-    lr.x = lerp(lr.x, -1.2, sw); lr.y = lerp(lr.y, 0.5 + out * 0.6, sw); lr.z = lerp(lr.z, 0.3, sw);
+    lp.lerp(new THREE.Vector3(-0.09 - out * 0.24, -0.2 - out * 0.03, -0.52 + back * 0.2), sw);
+    lr.x = lerp(lr.x, 0.32, sw); lr.y = lerp(lr.y, -0.3 - out * 0.55, sw); lr.z = lerp(lr.z, -1.35, sw);
     lp.y -= (this.deadK * 0.6 + draw * 0.45);
     this.left.position.copy(lp); this.left.rotation.copy(lr);
     this.left.visible = this.lanternK > 0.02 || sw > 0.02;

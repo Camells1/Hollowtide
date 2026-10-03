@@ -29,7 +29,7 @@ export function patchMaterial(src, kind, opts = {}) {
   const glowColor = new THREE.Color(opts.glowColor ?? 0x40ffd8);
   mat.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, propUniforms);
-    if (stone) Object.assign(sh.uniforms, { tStoneD: { value: A.tex.stone.diff }, tStoneN: { value: A.tex.stone.nor }, tMossD: { value: A.tex.moss.diff } });
+    if (stone) Object.assign(sh.uniforms, { tStoneD: { value: A.tex[opts.tex || 'stone'].diff }, tStoneN: { value: A.tex[opts.tex || 'stone'].nor }, tMossD: { value: A.tex.moss.diff } });
     sh.uniforms.uGlowColor = { value: glowColor };
     sh.vertexShader = sh.vertexShader.replace('#include <common>', VERT_HEAD);
     if (sway) {
@@ -62,7 +62,8 @@ ${GLSL_NOISE}`);
   vec3 bw = pow(abs(tn), vec3(4.0)); bw /= (bw.x + bw.y + bw.z);
   vec3 s = texture2D(tStoneD, vPW.zy / 2.5).rgb * bw.x + texture2D(tStoneD, vPW.xz / 2.5).rgb * bw.y + texture2D(tStoneD, vPW.xy / 2.5).rgb * bw.z;
   float lum = dot(s, vec3(0.299, 0.587, 0.114));
-  diffuseColor.rgb *= mix(vec3(1.0), s / max(lum, 0.05) * (0.45 + lum), 0.55) * (0.55 + lum * 0.9);
+  vec3 hue = mix(vec3(lum), s, ${(opts.hue ?? 0.3).toFixed(2)}) / max(lum, 0.05);   // keep the stone grey-brown, not orange
+  diffuseColor.rgb *= mix(vec3(1.0), hue * (0.45 + lum), 0.55) * (0.7 + lum * 1.1);
   // Moss on the tops of things
   float moss = smoothstep(0.55, 0.85, tn.y + (htNoise(vPW.xz * 0.8) - 0.5) * 0.5);
   vec3 m = texture2D(tMossD, vPW.xz / 2.0).rgb;
@@ -72,7 +73,7 @@ ${GLSL_NOISE}`);
     mapPart += `
 {
   float under = 1.0 - smoothstep(-0.3, 0.35 + (htNoise(vPW.xz * 3.0) - 0.5) * 0.4, vPW.y);
-  float speck = step(0.78, htNoise(vPW.xz * 9.0 + vPW.y * 7.0));
+  float speck = smoothstep(2.05, 2.2, htNoise(vPW.xy * 7.0) + htNoise(vPW.yz * 7.0 + 5.0) + htNoise(vPW.zx * 7.0 + 9.0));
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.55, 0.66, 0.5) + speck * 0.12, under * ${kind === 'plant' ? '0.0' : '0.8'});
 }`;
     sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>' + mapPart);
@@ -87,7 +88,7 @@ ${GLSL_NOISE}`);
     if (glow) sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 totalEmissiveRadiance += uGlowColor * uGlow * (0.55 + 0.45 * sin(uTime * 1.7 + vPW.x * 0.3 + vPW.z * 0.2));`);
   };
-  mat.customProgramCacheKey = () => `ht-${kind}-${glow ? 1 : 0}`;
+  mat.customProgramCacheKey = () => `ht-${kind}-${glow ? 1 : 0}-${opts.hue ?? 0.3}`;
   if (stone) { mat.roughness = Math.max(mat.roughness ?? 1, 0.85); mat.metalness = 0; }
   return mat;
 }

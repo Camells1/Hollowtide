@@ -13,7 +13,7 @@ export class Input {
     addEventListener('mousemove', e => { if (!this.locked) return; if (Math.abs(e.movementX) > 400 || Math.abs(e.movementY) > 400) return; this.dx += e.movementX; this.dy += e.movementY; });
     document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === canvas; this.onLockChange?.(this.locked); });
   }
-  lock() { if (!this.locked) { try { const p = this.canvas.requestPointerLock({ unadjustedMovement: true }); p?.catch?.(() => this.canvas.requestPointerLock()); } catch (_) { this.canvas.requestPointerLock(); } } }
+  lock() { if (!this.locked) { try { const p = this.canvas.requestPointerLock({ unadjustedMovement: true }); p?.catch?.(() => { try { this.canvas.requestPointerLock()?.catch?.(() => {}); } catch (_) {} }); } catch (_) { this.canvas.requestPointerLock(); } } }
   unlock() { if (this.locked) document.exitPointerLock(); }
   // True once per key press
   hit(code) { const v = !!this.pressed[code]; this.pressed[code] = false; return v; }

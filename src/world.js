@@ -6,12 +6,14 @@ import { WORLD } from './config.js';
 import { rng, clamp } from './util.js';
 import { A, instance } from './assets.js';
 import { patchMaterial, propUniforms } from './materials.js';
+import { Builder, BUILDERS } from './ruins.js';
 
 // How each model is drawn: kind (see materials.js), size by height or by length, shadows
 const PROPS = {
-  column1: { kind: 'stone' }, column2: { kind: 'stone' }, column_round: { kind: 'stone' }, arch: { kind: 'stone' }, pedestal: { kind: 'stone' },
-  stag_statue: { kind: 'stone' }, fox_statue: { kind: 'stone' },
-  rock1: { kind: 'stone' }, rock2: { kind: 'stone' }, rocks: { kind: 'stone' }, rock_large: { kind: 'stone' },
+  column1: { kind: 'stone', tint: 0xa89f8c, tintK: 0.75 }, column2: { kind: 'stone', tint: 0xa89f8c, tintK: 0.75 }, column_round: { kind: 'stone', tint: 0xb5ad9c, tintK: 0.75 },
+  arch: { kind: 'stone', tint: 0x9d9484, tintK: 0.75 }, pedestal: { kind: 'stone', tint: 0xb0a794, tintK: 0.75 },
+  stag_statue: { kind: 'stone', tint: 0xa39a88, tintK: 0.75 }, fox_statue: { kind: 'stone', tint: 0xa39a88, tintK: 0.75 },
+  rock1: { kind: 'stone', tint: 0x9a948a }, rock2: { kind: 'stone', tint: 0x8f8a80 }, rocks: { kind: 'stone', tint: 0x857f76 }, rock_large: { kind: 'stone', tint: 0x948e84 },
   shipwreck: { kind: 'wood', by: 'long' }, barrel: { kind: 'wood' }, anchor: { kind: 'wood' }, dock: { kind: 'wood', by: 'long' },
   ocean_chest: { kind: 'wood', by: 'long' }, bonfire: { kind: 'plain' }, tent: { kind: 'plain' },
   palm1: { kind: 'palm' }, palm2: { kind: 'palm' }, palm3: { kind: 'palm' },
@@ -40,7 +42,14 @@ function template(name) {
   const mats = new Map();
   const parts = meshes.map(m => {
     const list = Array.isArray(m.material) ? m.material : [m.material];
-    const patched = list.map(mt => { if (!mats.has(mt)) mats.set(mt, patchMaterial(mt, def.kind, { glow: def.glow != null, glowColor: def.glow })); return mats.get(mt); });
+    const patched = list.map(mt => {
+      if (!mats.has(mt)) {
+        const pm = patchMaterial(mt, def.kind, { glow: def.glow != null, glowColor: def.glow });
+        if (def.tint != null) { pm.color.lerp(new THREE.Color(def.tint), def.tintK ?? 1); if ((def.tintK ?? 1) === 1) pm.map = null; }
+        mats.set(mt, pm);
+      }
+      return mats.get(mt);
+    });
     return { geometry: m.geometry, material: Array.isArray(m.material) ? patched : patched[0], matrix: norm.clone().multiply(m.matrixWorld) };
   });
   const t = { parts, radius: Math.max(size.x, size.z) * k / 2, height: size.y * k, length: Math.max(size.x, size.z) * k, longX: size.x >= size.z, shadow: def.shadow !== false };
@@ -59,10 +68,14 @@ export class World {
     this.chunks = [];
     const R = rng(seed * 7 + 3);
     this.density = quality === 'low' ? 0.5 : 1;
+    this.builder = new Builder(this);
+    this._plants();
     this.sites.forEach((s, i) => this._site(s, i));
     this._camps();
     this._scatter(R);
     this._build();
+    this.builder.finish(this.chunks, quality !== 'low');
+    this._beacons();
     // Two campfire lights follow the two nearest camps
     this.fireLights = [0, 1].map(() => { const l = new THREE.PointLight(0xff8a3a, 0, 26, 1.7); this.group.add(l); return l; });
   }
@@ -75,9 +88,52 @@ export class World {
     let g = this.terrain.heightAt(x, z);
     for (const c of this.collidersAt(x, z)) {
       if (!c.walk || c.top > y + 0.55 || c.top <= g) continue;
-      if ((x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r) g = c.top;
+      if (this._inside(c, x, z, 0)) g = c.top;
     }
     return g;
+  }
+
+  _inside(c, x, z, pad) {
+    const dx = x - c.x, dz = z - c.z;
+    if (!c.box) return dx * dx + dz * dz < (c.r + pad) * (c.r + pad);
+    return Math.abs(dx * c.cs - dz * c.sn) < c.hx + pad && Math.abs(dx * c.sn + dz * c.cs) < c.hz + pad;
+  }
+
+  // A rectangular collider (walls, floors, steps). o: { x, z, hx, hz, ry, top, bottom (you can pass under it), walk }
+  addBox(o) {
+    o.box = true; o.cs = Math.cos(o.ry || 0); o.sn = Math.sin(o.ry || 0); o.r = Math.hypot(o.hx, o.hz);
+    return this.addCollider(o);
+  }
+
+  // Push a body (feet at height y) out of anything solid. vel is optional: it slides along what it hits
+  push(p, y, pad, vel, tall = 1.7) {
+    for (const c of this.collidersAt(p.x, p.z)) {
+      if (y >= c.top - 0.35) continue;                          // above it
+      if (c.walk && c.top - y <= 0.55) continue;                // low enough to step onto
+      if (c.bottom != null && y + tall < c.bottom) continue;    // passing underneath
+      const dx = p.x - c.x, dz = p.z - c.z;
+      let nx, nz, move;
+      if (c.box) {
+        const lx = dx * c.cs - dz * c.sn, lz = dx * c.sn + dz * c.cs;
+        const ox = c.hx + pad - Math.abs(lx), oz = c.hz + pad - Math.abs(lz);
+        if (ox <= 0 || oz <= 0) continue;
+        if (ox < oz) { const sg = lx < 0 ? -1 : 1; nx = c.cs * sg; nz = -c.sn * sg; move = ox; }
+        else { const sg = lz < 0 ? -1 : 1; nx = c.sn * sg; nz = c.cs * sg; move = oz; }
+      } else {
+        const d = Math.hypot(dx, dz), min = c.r + pad;
+        if (d >= min || d < 1e-4) continue;
+        nx = dx / d; nz = dz / d; move = min - d;
+      }
+      p.x += nx * move; p.z += nz * move;
+      if (vel) { const into = vel.x * nx + vel.z * nz; if (into < 0) { vel.x -= nx * into; vel.z -= nz * into; } }
+    }
+  }
+
+  // The lowest ground height under a circle
+  footY(x, z, r) {
+    let y = this.terrain.heightAt(x, z);
+    if (r > 0.3) for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; y = Math.min(y, this.terrain.heightAt(x + Math.cos(a) * r, z + Math.sin(a) * r)); }
+    return y;
   }
 
   // ---------------------------------------------------------------- colliders
@@ -92,13 +148,15 @@ export class World {
     return c;
   }
   collidersAt(x, z) { return this.cells.get(this._key(Math.floor(x / 16), Math.floor(z / 16))) || EMPTY; }
-  blocked(x, z, pad = 0.5) { return this.collidersAt(x, z).some(c => Math.hypot(c.x - x, c.z - z) < c.r + pad); }
+  blocked(x, z, pad = 0.5) { return this.collidersAt(x, z).some(c => this._inside(c, x, z, pad)); }
 
   // ---------------------------------------------------------------- placing props
   // Adds one instance. o: { size, ry, y, sink, tilt, lay, sy, collide (false | radius scale), walk }
   put(name, x, z, o = {}) {
     const t = template(name), size = o.size ?? 1, ry = o.ry ?? 0;
-    let y = o.y ?? this.ground(x, z) - (o.sink ?? 0);
+    // Seat it on the lowest ground under its footprint and bury the base a little, so nothing hovers on a slope
+    const foot = Math.min(t.radius * size * 0.8, 6);
+    let y = o.y ?? this.footY(x, z, foot) - (o.sink ?? 0) - t.height * size * (o.bury ?? 0.04);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(o.tiltX ?? 0, ry, o.tiltZ ?? 0, 'YXZ');
     let px = x, pz = z;
     if (o.lay) {
@@ -106,7 +164,7 @@ export class World {
       e.set(0, ry, Math.PI / 2, 'YXZ');
       const len = t.height * size, rad = t.radius * size, dx = -Math.cos(ry), dz = Math.sin(ry);
       px = x - dx * len / 2; pz = z - dz * len / 2;
-      y = this.ground(x, z) + rad * 0.75;
+      y = this.footY(x, z, Math.min(len / 2, 4)) + rad * 0.6;
       for (let s = -len / 2 + rad; s <= len / 2 - rad + 0.01; s += Math.max(0.8, rad)) {
         this.addCollider({ x: x + dx * s, z: z + dz * s, r: rad * 0.95, top: y + rad, walk: true });
       }
@@ -145,9 +203,74 @@ export class World {
     }
   }
 
+  // Procedural plants and driftwood, registered as models so they can be scattered like the rest
+  _plants() {
+    if (templates.has('tuft')) return;
+    const one = new THREE.Matrix4();
+    // Grass tuft: a fan of thin blades
+    const pos = [], col = [];
+    for (let k = 0; k < 7; k++) {
+      const a = k / 7 * TAU + (k % 2) * 0.4, r = 0.05 + (k % 3) * 0.05, lean = 0.22 + (k % 3) * 0.1, w = 0.035, h = 0.6 + (k % 4) * 0.13;
+      const bx = Math.cos(a) * r, bz = Math.sin(a) * r, px = -Math.sin(a) * w, pz = Math.cos(a) * w;
+      pos.push(bx - px, 0, bz - pz, bx + px, 0, bz + pz, bx + Math.cos(a) * lean, h, bz + Math.sin(a) * lean);
+      col.push(0.5, 0.6, 0.4, 0.5, 0.6, 0.4, 1.1, 1.2, 0.8);
+    }
+    const tuft = new THREE.BufferGeometry();
+    tuft.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); tuft.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); tuft.computeVertexNormals();
+    const grassMat = patchMaterial(new THREE.MeshStandardMaterial({ color: 0x6f9a48, vertexColors: true, side: THREE.DoubleSide, roughness: 0.9 }), 'plant');
+    templates.set('tuft', { parts: [{ geometry: tuft, material: grassMat, matrix: one }], radius: 0.3, height: 1, length: 0.6, longX: true, shadow: false });
+    // Bush: a few lumpy balls, darker underneath
+    const bushMat = patchMaterial(new THREE.MeshStandardMaterial({ color: 0x3f7a3a, roughness: 0.9, flatShading: true, vertexColors: true }), 'palm');
+    const balls = [[0, 0.45, 0, 0.5], [0.38, 0.32, 0.1, 0.36], [-0.3, 0.3, 0.22, 0.38], [0.05, 0.3, -0.36, 0.34]].map(([x, y, z, r]) => {
+      const g = new THREE.IcosahedronGeometry(r, 1), q = g.attributes.position;
+      for (let i = 0; i < q.count; i++) { const n = 1 + Math.sin(q.getX(i) * 13 + q.getY(i) * 7 + q.getZ(i) * 11) * 0.12; q.setXYZ(i, q.getX(i) * n, q.getY(i) * n * 0.85, q.getZ(i) * n); }
+      g.translate(x, y, z); g.computeVertexNormals();
+      const c = new Float32Array(q.count * 3);
+      for (let i = 0; i < q.count; i++) { const sh = 0.6 + q.getY(i) * 0.7; c[i * 3] = sh; c[i * 3 + 1] = sh; c[i * 3 + 2] = sh; }
+      g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+      return g;
+    });
+    templates.set('bush', { parts: balls.map(g => ({ geometry: g, material: bushMat, matrix: one })), radius: 0.75, height: 1, length: 1.5, longX: true, shadow: true });
+    // Driftwood log
+    const log = new THREE.CylinderGeometry(0.11, 0.15, 1, 8); log.translate(0, 0.5, 0);
+    const logMat = patchMaterial(new THREE.MeshStandardMaterial({ color: 0xa08a70, roughness: 1 }), 'stone', { tex: 'planks', hue: 0.5 });
+    templates.set('log', { parts: [{ geometry: log, material: logMat, matrix: one }], radius: 0.15, height: 1, length: 0.3, longX: true, shadow: true });
+  }
+
+  // Lighthouse lamps: a glowing lantern room and two beams that sweep the lagoon at night
+  _beacons() {
+    this.beacons = this.builder.beacons.map(b => {
+      const g = new THREE.Group(); g.position.set(b.x, b.y, b.z);
+      const lampMat = new THREE.MeshBasicMaterial({ color: 0xffe2a0, fog: false });
+      g.add(new THREE.Mesh(new THREE.CylinderGeometry(2.1, 2.1, 2.6, 12), lampMat));
+      const beamMat = new THREE.ShaderMaterial({
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, uniforms: { uK: { value: 0 } },
+        vertexShader: 'varying float vT; void main() { vT = uv.y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+        fragmentShader: 'uniform float uK; varying float vT; void main() { float a = clamp(vT, 0.0, 1.0); a = a * a * uK * 0.5; gl_FragColor = vec4(vec3(1.0, 0.9, 0.65) * a, a); }'
+      });
+      const cone = new THREE.CylinderGeometry(1.2, 16, 150, 16, 1, true); cone.rotateZ(Math.PI / 2); cone.translate(-76, 0, 0);
+      const spin = new THREE.Group(); spin.add(new THREE.Mesh(cone, beamMat)); const back = new THREE.Mesh(cone, beamMat); back.rotation.y = Math.PI; spin.add(back);
+      spin.children.forEach(m => { m.frustumCulled = false; m.renderOrder = 3; });
+      g.add(spin); this.group.add(g);
+      return { g, spin, lampMat, beamMat };
+    });
+  }
+
   // ---------------------------------------------------------------- ruin sites
   _site(s, si) {
-    const R = rng(s.seed), g = (x, z) => this.ground(x, z);
+    const R = rng(s.seed);
+    if (BUILDERS[s.type]) {
+      BUILDERS[s.type](this.builder, s, R);
+      // Dress it with rocks, coral and kelp
+      for (let k = 0; k < 14 * this.density; k++) {
+        const a = R() * TAU, d = s.r * (0.5 + R() * 0.7), x = s.x + Math.cos(a) * d, z = s.z + Math.sin(a) * d;
+        if (this.blocked(x, z, 1.2)) continue;
+        if (k % 3 === 0) this.put(['rock1', 'rock2', 'rocks'][(k / 3 | 0) % 3], x, z, { size: 0.7 + R() * 1.6, ry: R() * TAU, bury: 0.3, walk: true });
+        else if (k % 3 === 1) this.put('coral:' + (k % 8), x, z, { size: 0.7 + R() * 1.4, ry: R() * TAU, collide: false, bury: 0.12 });
+        else this.put('seaweed', x, z, { size: 1.2 + R() * 1.8, ry: R() * TAU, collide: false, bury: 0.08 });
+      }
+      return;
+    }
     s.spots = [];
     const at = (a, d) => [s.x + Math.cos(a) * d, s.z + Math.sin(a) * d];
     const column = (x, z, tall) => {
@@ -156,7 +279,7 @@ export class World {
       else this.put(model, x, z, { size: (tall ?? 7) * (0.9 + R() * 0.25), ry: R() * TAU, tiltZ: (R() - 0.5) * 0.08, collide: 0.7 });
     };
     const fallen = () => { const [x, z] = at(R() * TAU, R() * s.r * 0.7); this.put('column_round', x, z, { size: 5 + R() * 3, ry: R() * TAU, lay: true }); };
-    const rocks = n => { for (let k = 0; k < n; k++) { const [x, z] = at(R() * TAU, s.r * (0.5 + R() * 0.7)); this.put(['rock1', 'rock2', 'rocks'][k % 3], x, z, { size: 0.8 + R() * 1.8, ry: R() * TAU, sink: 0.2, walk: true }); } };
+    const rocks = n => { for (let k = 0; k < n; k++) { const [x, z] = at(R() * TAU, s.r * (0.5 + R() * 0.7)); this.put(['rock1', 'rock2', 'rocks'][k % 3], x, z, { size: 0.8 + R() * 1.8, ry: R() * TAU, bury: 0.3, walk: true }); } };
     const statue = (x, z, big) => {
       const plinth = this.put('pedestal', x, z, { size: big ? 2.4 : 1.4, ry: R() * TAU, walk: true, collide: 0.9 });
       this.put(R() < 0.5 ? 'stag_statue' : 'fox_statue', x, z, { size: big ? 9 + R() * 3 : 3 + R(), ry: R() * TAU, y: plinth.top - 0.05, collide: 0.45 });
@@ -194,10 +317,10 @@ export class World {
       rocks(5);
       for (let k = 0; k < 18 * this.density; k++) { const [x2, z2] = at(R() * TAU, len * 0.4 + R() * 12); this.put('seaweed', x2, z2, { size: 1.2 + R() * 1.6, ry: R() * TAU, collide: false }); }
     } else if (s.type === 'garden') {
-      for (let k = 0; k < 3; k++) { const [x, z] = at(k / 3 * TAU + R(), s.r * (0.45 + R() * 0.3)); this.put('rock_large', x, z, { size: 4 + R() * 5, ry: R() * TAU, sink: 0.6, collide: 0.6 }); }
+      for (let k = 0; k < 3; k++) { const [x, z] = at(k / 3 * TAU + R(), s.r * (0.45 + R() * 0.3)); this.put('rock_large', x, z, { size: 4 + R() * 5, ry: R() * TAU, bury: 0.28, collide: 0.6 }); }
       const [ax, az] = at(R() * TAU, 3);
       this.put('arch', ax, az, { size: 6.5, ry: R() * TAU, tiltZ: 0.06, collide: 0.3 });
-      for (let k = 0; k < 40 * this.density; k++) { const [x, z] = at(R() * TAU, Math.sqrt(R()) * s.r * 1.1); this.put('coral:' + (k % 8), x, z, { size: 0.8 + R() * 1.8, ry: R() * TAU, collide: false }); }
+      for (let k = 0; k < 40 * this.density; k++) { const [x, z] = at(R() * TAU, Math.sqrt(R()) * s.r * 1.1); this.put('coral:' + (k % 8), x, z, { size: 0.8 + R() * 1.8, ry: R() * TAU, collide: false, bury: 0.12 }); }
       for (let k = 0; k < 24 * this.density; k++) { const [x, z] = at(R() * TAU, s.r * (0.6 + R() * 0.6)); this.put('seaweed', x, z, { size: 1.4 + R() * 1.8, ry: R() * TAU, collide: false }); }
       rocks(4);
     } else { // sentinel
@@ -228,7 +351,7 @@ export class World {
       best ||= { x: is.x, z: is.z };
       const cx = best.x, cz = best.z, face = Math.atan2(-cz, -cx); // face the lagoon centre (or north for Home Isle)
       const camp = { name: is.name, main: !!is.main, x: cx, z: cz, y: this.ground(cx, cz) };
-      this.put('bonfire', cx, cz, { size: 0.8, collide: 0.9 });
+      this.put('bonfire', cx, cz, { size: 0.55, collide: 0.9 });
       const off = (a, d) => [cx + Math.cos(face + a) * d, cz + Math.sin(face + a) * d];
       const [sx, sz] = off(0.9, 4);
       this.put('ocean_chest', sx, sz, { size: 1.5, ry: -(face + 0.9) - Math.PI / 2, collide: 0.8 });
@@ -242,7 +365,7 @@ export class World {
         this._workbench(bx, bz, -(face - 0.9));
         this._dock(is);
       }
-      const [px, pz] = off(0.3, 2.6);
+      const [px, pz] = off(0.2, 4.8);
       camp.spawn = [px, pz];
       this.camps.push(camp);
     }
@@ -253,7 +376,7 @@ export class World {
     const planks = new THREE.MeshStandardMaterial({ map: A.tex.planks.diff, normalMap: A.tex.planks.nor, roughnessMap: A.tex.planks.rough });
     const dark = new THREE.MeshStandardMaterial({ color: 0x4a3322, roughness: 0.9 });
     const iron = new THREE.MeshStandardMaterial({ color: 0x5a5f66, metalness: 0.85, roughness: 0.4 });
-    const g = new THREE.Group(); g.position.set(x, this.ground(x, z), z); g.rotation.y = ry;
+    const g = new THREE.Group(); g.position.set(x, this.footY(x, z, 1.1) - 0.03, z); g.rotation.y = ry;
     const add = (geo, mat, px, py, pz, rx = 0, ryy = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(px, py, pz); m.rotation.set(rx, ryy, rz); m.castShadow = m.receiveShadow = true; g.add(m); return m; };
     add(new THREE.BoxGeometry(2.4, 0.12, 1.1), planks, 0, 0.98, 0);
     for (const sx of [-1.05, 1.05]) for (const sz of [-0.42, 0.42]) add(new THREE.BoxGeometry(0.14, 0.95, 0.14), dark, sx, 0.47, sz);
@@ -296,14 +419,45 @@ export class World {
     const tryPlace = (n, test, fn) => { for (let k = 0, tries = 0; k < n && tries < n * 20; tries++) { const a = R() * TAU, d = Math.sqrt(R()) * (WORLD.rim + 20), x = Math.cos(a) * d, z = Math.sin(a) * d, y = this.ground(x, z); if (!test(x, z, y)) continue; fn(x, z, y); k++; } };
     // Kelp and coral grow in clumps on the lagoon floor
     tryPlace(650 * D, (x, z, y) => y < -2.5 && y > -30 && Math.sin(x * 0.02) * Math.cos(z * 0.025) > -0.2 && !this.blocked(x, z, 0.3), (x, z) => {
-      for (let k = 0; k < 3; k++) this.put('seaweed', x + (R() - 0.5) * 3, z + (R() - 0.5) * 3, { size: 1 + R() * 2.2, ry: R() * TAU, collide: false });
+      for (let k = 0; k < 3; k++) this.put('seaweed', x + (R() - 0.5) * 3, z + (R() - 0.5) * 3, { size: 1 + R() * 2.2, ry: R() * TAU, collide: false, bury: 0.08 });
     });
-    tryPlace(380 * D, (x, z, y) => y < -3.5 && y > -30 && !this.blocked(x, z, 0.5), (x, z) => this.put('coral:' + Math.floor(R() * 8), x, z, { size: 0.7 + R() * 1.6, ry: R() * TAU, collide: false }));
+    tryPlace(380 * D, (x, z, y) => y < -3.5 && y > -30 && !this.blocked(x, z, 0.5), (x, z) => this.put('coral:' + Math.floor(R() * 8), x, z, { size: 0.7 + R() * 1.6, ry: R() * TAU, collide: false, bury: 0.12 }));
     // Rocks on the seabed and big boulders along the atoll
-    tryPlace(260 * D, (x, z, y) => y < 0 && !this.blocked(x, z, 1), (x, z) => this.put(['rock1', 'rock2', 'rocks'][Math.floor(R() * 3)], x, z, { size: 0.7 + R() * 2.4, ry: R() * TAU, sink: 0.3, walk: true }));
+    tryPlace(260 * D, (x, z, y) => y < 0 && !this.blocked(x, z, 1), (x, z) => this.put(['rock1', 'rock2', 'rocks'][Math.floor(R() * 3)], x, z, { size: 0.7 + R() * 2.4, ry: R() * TAU, bury: 0.3, walk: true }));
     for (let k = 0; k < 90; k++) {
       const a = k / 90 * TAU + R() * 0.05, d = WORLD.rim + (R() - 0.3) * 30, x = Math.cos(a) * d, z = Math.sin(a) * d;
-      this.put('rock_large', x, z, { size: 6 + R() * 10, ry: R() * TAU, sink: 1.5, collide: 0.55 });
+      this.put('rock_large', x, z, { size: 6 + R() * 10, ry: R() * TAU, bury: 0.3, collide: 0.55 });
+    }
+    // Small things to find between the sites: lone arches, broken columns, sunken boats, statues, anchors
+    const clear = (x, z) => !this.blocked(x, z, 3) && !this.sites.some(st => Math.hypot(st.x - x, st.z - z) < st.r + 14);
+    tryPlace(90 * D, (x, z, y) => y < -3 && y > -16 && Math.hypot(x, z) < WORLD.rim - 40 && clear(x, z), (x, z) => {
+      const k = Math.floor(R() * 7), ry = R() * TAU;
+      if (k === 0) this.put('arch', x, z, { size: 5 + R() * 3, ry, tiltZ: (R() - 0.5) * 0.25, bury: 0.12, collide: 0.3 });
+      else if (k === 1) { this.put('column1', x, z, { size: 5 + R() * 3, ry, collide: 0.7 }); this.put('column2', x + 3 + R() * 2, z + R() * 2, { size: 1.5 + R() * 2, ry, walk: true, collide: 0.8 }); this.put('column_round', x - 2, z + 3, { size: 5, ry: R() * TAU, lay: true }); }
+      else if (k === 2) this.put('shipwreck', x, z, { size: 9 + R() * 5, ry, tiltZ: (R() - 0.5) * 0.5, bury: 0.2, collide: 0.35 });
+      else if (k === 3) { const pl = this.put('pedestal', x, z, { size: 1.2, ry, walk: true, collide: 0.9 }); this.put(R() < 0.5 ? 'stag_statue' : 'fox_statue', x, z, { size: 2.6 + R() * 1.5, ry, y: pl.top - 0.05, collide: 0.45 }); }
+      else if (k === 4) { this.put('anchor', x, z, { size: 2.6 + R(), ry, tiltX: 0.5 + R() * 0.5, bury: 0.15 }); for (let i = 0; i < 3; i++) this.put('barrel', x + (R() - 0.5) * 5, z + (R() - 0.5) * 5, { size: 1, ry: R() * TAU, lay: R() < 0.5, walk: true }); }
+      else if (k === 5) { for (let i = 0; i < 5; i++) { const a = i / 5 * TAU; this.put('rock_large', x + Math.cos(a) * 4, z + Math.sin(a) * 4, { size: 2.5 + R() * 3, ry: R() * TAU, bury: 0.3, collide: 0.6 }); } for (let i = 0; i < 6; i++) this.put('coral:' + i, x + (R() - 0.5) * 5, z + (R() - 0.5) * 5, { size: 1 + R() * 1.5, ry: R() * TAU, collide: false, bury: 0.12 }); }
+      else { for (let i = 0; i < 3; i++) this.put('column_round', x + (R() - 0.5) * 7, z + (R() - 0.5) * 7, { size: 3.5 + R() * 3, ry: R() * TAU, lay: true }); }
+    });
+    // Islands: grass, bushes, driftwood on the beaches
+    for (const is of WORLD.islands) {
+      const area = (is.r / 50) ** 2;
+      for (let k = 0, tries = 0; k < 1700 * area * D && tries < 40000; tries++) {
+        const a = R() * TAU, d = Math.sqrt(R()) * is.r * 1.1, x = is.x + Math.cos(a) * d, z = is.z + Math.sin(a) * d, y = this.ground(x, z);
+        if (y < 2.9 || this.terrain.normalAt(x, z).y < 0.86) continue;
+        this.put('tuft', x, z, { size: 0.3 + R() * 0.4, ry: R() * TAU, collide: false, bury: 0 }); k++;
+      }
+      for (let k = 0, tries = 0; k < 45 * area && tries < 2000; tries++) {
+        const a = R() * TAU, d = Math.sqrt(R()) * is.r, x = is.x + Math.cos(a) * d, z = is.z + Math.sin(a) * d, y = this.ground(x, z);
+        if (y < 2.6 || this.blocked(x, z, 1.5) || this.camps.some(c => Math.hypot(c.x - x, c.z - z) < 9)) continue;
+        this.put('bush', x, z, { size: 0.9 + R() * 1.3, ry: R() * TAU, collide: false, bury: 0.1 }); k++;
+      }
+      for (let k = 0, tries = 0; k < 9 * area && tries < 2000; tries++) {
+        const a = R() * TAU, d = is.r * (0.8 + R() * 0.35), x = is.x + Math.cos(a) * d, z = is.z + Math.sin(a) * d, y = this.ground(x, z);
+        if (y < 0.3 || y > 2.2 || this.blocked(x, z, 2)) continue;
+        this.put('log', x, z, { size: 2 + R() * 2.5, ry: R() * TAU, lay: true }); k++;
+      }
     }
     // Islands: palms and rocks
     for (const is of WORLD.islands) {
@@ -311,13 +465,13 @@ export class World {
       for (let k = 0, tries = 0; k < n && tries < 600; tries++) {
         const a = R() * TAU, d = Math.sqrt(R()) * is.r * 1.05, x = is.x + Math.cos(a) * d, z = is.z + Math.sin(a) * d, y = this.ground(x, z);
         if (y < 1.2 || y > 14 || this.blocked(x, z, 2.5) || this.camps.some(c => Math.hypot(c.x - x, c.z - z) < 11)) continue;
-        this.put('palm' + (1 + Math.floor(R() * 3)), x, z, { size: 7 + R() * 4, ry: R() * TAU, collide: 0.06, sink: 0.2 });
+        this.put('palm' + (1 + Math.floor(R() * 3)), x, z, { size: 7 + R() * 4, ry: R() * TAU, collide: 0.06, bury: 0.05 });
         k++;
       }
       for (let k = 0; k < 10; k++) {
         const a = R() * TAU, d = is.r * (0.7 + R() * 0.5), x = is.x + Math.cos(a) * d, z = is.z + Math.sin(a) * d;
         if (this.blocked(x, z, 1.5)) continue;
-        this.put(R() < 0.4 ? 'rock_large' : 'rock1', x, z, { size: 1.5 + R() * 3, ry: R() * TAU, sink: 0.4, walk: true });
+        this.put(R() < 0.4 ? 'rock_large' : 'rock1', x, z, { size: 1.5 + R() * 3, ry: R() * TAU, bury: 0.3, walk: true });
       }
     }
   }
@@ -330,6 +484,7 @@ export class World {
       const dx = Math.max(Math.abs(camera.position.x - c.userData.cx) - step / 2, 0), dz = Math.max(Math.abs(camera.position.z - c.userData.cz) - step / 2, 0);
       c.visible = Math.hypot(dx, dz) < far;
     }
+    for (const b of this.beacons) { b.spin.rotation.y = time * 0.45; b.beamMat.uniforms.uK.value = night; b.lampMat.color.setRGB(0.25 + night * 1.6, 0.22 + night * 1.3, 0.14 + night * 0.7); }
     // The boat floats, or sits on the sand when the tide is out
     if (this.boat) {
       const b = this.boat, gy = this.ground(b.position.x, b.position.z);
