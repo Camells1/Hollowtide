@@ -1,90 +1,115 @@
-// A low-poly diver/explorer used for you and for co-op friends.
-// Procedural animation: walk, sprint, swim (body tilts forward, arms stroke), swing, and fall over.
+// Animated divers for co-op friends (and your own shadow): real rigged models with blended
+// idle / walk / run / strafe / swim / jump, plus slash, interact, hit, wave and death.
 import * as THREE from 'three';
+import { A, instance } from './assets.js';
+import { clamp } from './util.js';
 
-const skin = new THREE.MeshStandardMaterial({ color: 0xd9a27a, roughness: 0.7 });
-const dark = new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.8 });
-const glass = new THREE.MeshStandardMaterial({ color: 0x9fe8ff, emissive: 0x2a9fc0, emissiveIntensity: 0.35, roughness: 0.15, metalness: 0.3 });
-const leather = new THREE.MeshStandardMaterial({ color: 0x7a4a2a, roughness: 0.85 });
-const steel = new THREE.MeshStandardMaterial({ color: 0xc8d0d8, metalness: 0.8, roughness: 0.3 });
-
-const cap = (r, l) => new THREE.CapsuleGeometry(r, l, 4, 10);
-const part = (geo, mat, parent, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
+export const OUTFITS = [
+  { model: 'adventurer', name: 'Explorer', tint: { Green: 0x2f8f9f, LightGreen: 0x7fd6cc }, sword: true },
+  { model: 'hooded', name: 'Wanderer' },
+  { model: 'matt', name: 'Scout' },
+  { model: 'adventurer', name: 'Salvager', tint: { Green: 0xb8582a, LightGreen: 0xf0a060 }, sword: true }
+];
+// Our names for each animation, and what each model calls it
+const CLIPS = {
+  idle: ['Idle_Sword', 'Idle'], walk: ['Walk'], run: ['Run'], back: ['Run_Back', 'Walk'], left: ['Run_Left', 'Run'], right: ['Run_Right', 'Run'],
+  jump: ['Jump_Idle', 'Jump'], slash: ['Sword_Slash', 'Slash'], interact: ['Interact', 'Punch'], hit: ['HitRecieve', 'HitReact'],
+  death: ['Death'], wave: ['Wave'], yes: ['Yes', 'Interact'], tread: ['Idle_Neutral', 'Idle']
+};
+const ONCE = new Set(['slash', 'interact', 'hit', 'death', 'wave', 'yes']);
 
 export class Character {
-  constructor(color = 0x2f9fb0) {
-    const suit = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
-    const suitDark = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.55), roughness: 0.7 });
+  constructor(outfit = 0, { shadowOnly = false } = {}) {
+    const o = OUTFITS[((outfit % OUTFITS.length) + OUTFITS.length) % OUTFITS.length];
     this.root = new THREE.Group();
-    this.body = new THREE.Group(); this.root.add(this.body);
-    this.hips = new THREE.Group(); this.hips.position.y = 0.95; this.body.add(this.hips);
-    part(cap(0.2, 0.18), suitDark, this.hips, 0, 0.02, 0).rotation.z = Math.PI / 2;
-    this.chest = new THREE.Group(); this.chest.position.y = 0.12; this.hips.add(this.chest);
-    part(cap(0.24, 0.32), suit, this.chest, 0, 0.3, 0);
-    part(new THREE.BoxGeometry(0.42, 0.1, 0.32), leather, this.chest, 0, 0.12, 0); // belt
-    // Backpack with a small air tank
-    part(new THREE.BoxGeometry(0.38, 0.42, 0.2), leather, this.chest, 0, 0.36, -0.24);
-    part(new THREE.CylinderGeometry(0.08, 0.08, 0.5, 10), steel, this.chest, 0.14, 0.42, -0.36);
-    // Head with a round diving mask
-    this.head = new THREE.Group(); this.head.position.y = 0.72; this.chest.add(this.head);
-    part(new THREE.SphereGeometry(0.19, 14, 10), skin, this.head, 0, 0.06, 0);
-    part(new THREE.SphereGeometry(0.2, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), suitDark, this.head, 0, 0.08, -0.01); // hood
-    const mask = part(new THREE.CylinderGeometry(0.12, 0.12, 0.08, 16), glass, this.head, 0, 0.08, 0.17); mask.rotation.x = Math.PI / 2;
-    part(new THREE.TorusGeometry(0.125, 0.02, 6, 16), dark, this.head, 0, 0.08, 0.2);
-    // Arms and legs (pivot at the joint)
-    this.arms = []; this.legs = [];
-    for (const s of [1, -1]) {
-      const sh = new THREE.Group(); sh.position.set(0.3 * s, 0.52, 0); this.chest.add(sh);
-      part(cap(0.075, 0.26), suit, sh, 0, -0.2, 0);
-      const el = new THREE.Group(); el.position.y = -0.4; sh.add(el);
-      part(cap(0.065, 0.22), suitDark, el, 0, -0.16, 0);
-      part(new THREE.SphereGeometry(0.07, 8, 6), dark, el, 0, -0.34, 0);
-      this.arms.push({ sh, el, s });
-      const hip = new THREE.Group(); hip.position.set(0.12 * s, -0.02, 0); this.hips.add(hip);
-      part(cap(0.09, 0.3), suitDark, hip, 0, -0.24, 0);
-      const kn = new THREE.Group(); kn.position.y = -0.46; hip.add(kn);
-      part(cap(0.08, 0.28), suit, kn, 0, -0.2, 0);
-      part(new THREE.BoxGeometry(0.15, 0.08, 0.28), dark, kn, 0, -0.42, 0.06); // boot
-      this.legs.push({ hip, kn, s });
+    this.pivot = new THREE.Group(); this.pivot.position.y = 0.95; this.root.add(this.pivot); // swimming tilts around the hips
+    this.model = instance(o.model, 1.78);
+    this.model.position.y = -0.95; this.pivot.add(this.model);
+    const mats = new Map();
+    this.model.traverse(m => {
+      if (!m.isMesh) return;
+      if (!mats.has(m.material)) {
+        const c = m.material.clone();
+        if (o.tint?.[c.name]) c.color.set(o.tint[c.name]);
+        if (shadowOnly) { c.colorWrite = false; c.depthWrite = false; }
+        mats.set(m.material, c);
+      }
+      m.material = mats.get(m.material);
+    });
+    // The Explorer borrows the Wanderer's sword (same skeleton, same hand bone)
+    if (o.sword) {
+      let sword = null, hand = null;
+      A.models.hooded.scene.traverse(n => { if (n.name === 'Sword') sword = n; });
+      this.model.traverse(n => { if (n.name === 'Middle1.R') hand = n; });
+      if (sword && hand) { const s = sword.clone(); s.traverse(m => { if (m.isMesh) { m.castShadow = true; if (shadowOnly) { m.material = m.material.clone(); m.material.colorWrite = false; m.material.depthWrite = false; } } }); hand.add(s); }
     }
-    // Blade in the right hand
-    this.blade = part(new THREE.BoxGeometry(0.05, 0.05, 0.55), steel, this.arms[1].el, 0, -0.36, 0.25);
-    this.phase = 0; this.swingT = 0; this.deadT = 0;
+    this.mixer = new THREE.AnimationMixer(this.model);
+    const clips = A.models[o.model].animations;
+    this.actions = {};
+    for (const [key, names] of Object.entries(CLIPS)) {
+      const clip = names.map(n => clips.find(c => c.name.split('|').pop() === n)).find(Boolean);
+      if (!clip) continue;
+      const a = this.mixer.clipAction(clip);
+      if (ONCE.has(key)) { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
+      this.actions[key] = a;
+    }
+    this.cur = null; this.oneShot = null; this.pending = null; this.dead = false;
+    this.mixer.addEventListener('finished', e => {
+      if (e.action !== this.oneShot || this.dead) return;
+      this.oneShot = null;
+      this._to(this.pending || this.actions.idle, 0.25);
+    });
+    this._to(this.actions.idle, 0);
+    this.swimK = 0;
   }
 
-  swing() { this.swingT = 0.35; }
+  _to(a, fade) {
+    if (!a || a === this.cur) return;
+    a.reset().play();
+    if (this.cur && fade > 0) this.cur.crossFadeTo(a, fade, false);
+    else if (this.cur) this.cur.stop();
+    this.cur = a;
+  }
 
-  // s: { speed (m/s), swim (0..1), grounded, dead, yaw }
+  // One-off animations: 'slash', 'interact', 'hit', 'wave', 'yes'
+  play(key) {
+    const a = this.actions[key];
+    if (!a || this.dead) return;
+    if (key === 'hit' && this.oneShot && this.oneShot !== this.actions.hit) return; // don't interrupt a swing
+    a.reset().play();
+    if (this.cur && this.cur !== a) this.cur.crossFadeTo(a, 0.1, false);
+    this.cur = a; this.oneShot = a;
+  }
+
+  // s: { speed, fwd, side (m/s relative to facing), swim (0..1), grounded, dead, yaw }
   update(dt, s) {
-    this.root.rotation.y = s.yaw + Math.PI; // the model is built facing +Z; yaw faces -Z
-    const sp = Math.min(1, s.speed / 6);
-    this.phase += dt * (3 + s.speed * 1.6);
-    const ph = this.phase, sw = Math.sin(ph), swim = s.swim || 0;
-    // Body tilt: upright on land, horizontal when swimming
-    this.body.rotation.x = swim * (s.speed > 0.5 ? 1.25 : 0.35);
-    this.body.position.y = swim * 0.6;
-    this.hips.position.y = 0.95 + Math.abs(Math.cos(ph)) * 0.05 * sp * (1 - swim);
-    for (const L of this.legs) {
-      const walk = sw * 0.7 * sp * L.s;
-      const kick = Math.sin(ph * 2 + (L.s > 0 ? 0 : Math.PI)) * 0.35;
-      L.hip.rotation.x = (1 - swim) * walk + swim * kick;
-      L.kn.rotation.x = (1 - swim) * Math.max(0, -walk) * 1.2 + swim * 0.2;
+    this.root.rotation.y = s.yaw + Math.PI; // the models face +Z; our yaw faces -Z
+    if (s.dead && !this.dead) { this.dead = true; this.oneShot = null; this._to(this.actions.death, 0.15); }
+    else if (!s.dead && this.dead) { this.dead = false; this.cur?.stop(); this.cur = null; this._to(this.actions.idle, 0); }
+    // Swimming: lean forward and kick, tread water when still
+    this.swimK += ((s.swim > 0.5 ? 1 : 0) - this.swimK) * Math.min(1, dt * 4);
+    const moving = s.speed > 0.4;
+    this.pivot.rotation.x = this.swimK * (moving ? 1.25 : 0.25);
+    this.pivot.position.y = 0.95 + this.swimK * 0.35 * Math.sin(performance.now() / 600);
+    if (!this.dead) {
+      let base, ts = 1;
+      if (this.swimK > 0.5) { base = moving ? 'run' : 'tread'; ts = moving ? 0.45 + s.speed * 0.06 : 0.6; }
+      else if (!s.grounded && this.actions.jump) base = 'jump';
+      else if (!moving) base = 'idle';
+      else {
+        const f = s.fwd ?? s.speed, r = s.side ?? 0;
+        if (f < -0.4 * Math.abs(r)) { base = 'back'; ts = clamp(s.speed / 4.5, 0.6, 1.5); }
+        else if (Math.abs(r) > Math.abs(f) * 1.2) { base = r > 0 ? 'right' : 'left'; ts = clamp(s.speed / 5, 0.6, 1.5); }
+        else if (s.speed > 6) { base = 'run'; ts = clamp(s.speed / 6.5, 0.8, 1.5); }
+        else { base = 'walk'; ts = clamp(s.speed / 2.2, 0.6, 2.2); }
+      }
+      const a = this.actions[base] || this.actions.idle;
+      if (this.oneShot) this.pending = a;
+      else this._to(a, 0.22);
+      a.timeScale = ts;
     }
-    for (const A of this.arms) {
-      const walk = -sw * 0.6 * sp * A.s;
-      const stroke = Math.sin(ph * 1.2 + (A.s > 0 ? 0 : Math.PI));
-      A.sh.rotation.x = (1 - swim) * walk + swim * (-2.2 + stroke * 1.2);
-      A.sh.rotation.z = A.s * (0.12 + swim * 0.3);
-      A.el.rotation.x = (1 - swim) * -0.3 + swim * -0.4;
-    }
-    // Swing the blade
-    if (this.swingT > 0) {
-      this.swingT = Math.max(0, this.swingT - dt);
-      const k = 1 - this.swingT / 0.35, R = this.arms[1];
-      R.sh.rotation.x = -2.4 + k * 2.6; R.sh.rotation.z = -0.5 + k * 0.8;
-    }
-    // Death: fall over
-    if (s.dead) { this.deadT = Math.min(1, this.deadT + dt * 2); this.body.rotation.z = this.deadT * Math.PI / 2; this.body.position.y = -this.deadT * 0.6; }
-    else if (this.deadT) { this.deadT = 0; this.body.rotation.z = 0; }
+    this.mixer.update(dt);
   }
+
+  dispose() { this.root.removeFromParent(); this.mixer.stopAllAction(); }
 }

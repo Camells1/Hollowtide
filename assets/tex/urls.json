@@ -1,0 +1,47 @@
+{
+ "coast_sand_01": {
+  "diff": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/coast_sand_01/coast_sand_01_diff_1k.jpg",
+  "nor": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/coast_sand_01/coast_sand_01_nor_gl_1k.jpg",
+  "rough": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/coast_sand_01/coast_sand_01_rough_1k.jpg"
+ },
+ "damp_beach_sand": {
+  "diff": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/damp_beach_sand/damp_beach_sand_diff_1k.jpg",
+  "nor": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/damp_beach_sand/damp_beach_sand_nor_gl_1k.jpg",
+  "rough": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/damp_beach_sand/damp_beach_sand_rough_1k.jpg"
+ },
+ "coral_mud_01": {
+  "diff": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/coral_mud_01/coral_mud_01_diff_1k.jpg",
+  "nor": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/coral_mud_01/coral_mud_01_nor_gl_1k.jpg",
+  "rough": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/coral_mud_01/coral_mud_01_rough_1k.jpg"
+ },
+ "sparse_grass": {
+  "diff": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sparse_grass/sparse_grass_diff_1k.jpg",
+  "nor": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sparse_grass/sparse_grass_nor_gl_1k.jpg",
+  "rough": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sparse_grass/sparse_grass_rough_1k.jpg"
+ },
+ "rock_wall_02": {
+  "diff": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rock_wall_02/rock_wall_02_diff_1k.jpg",
+  "nor": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rock_wall_02/rock_wall_02_nor_gl_1k.jpg",
+  "rough": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rock_wall_02/rock_wall_02_rough_1k.jpg"
+ },
+ "seaworn_sandstone_brick": {
+  "diff": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/seaworn_sandstone_brick/seaworn_sandstone_brick_diff_1k.jpg",
+  "nor": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/seaworn_sandstone_brick/seaworn_sandstone_brick_nor_gl_1k.jpg",
+  "rough": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/seaworn_sandstone_brick/seaworn_sandstone_brick_rough_1k.jpg"
+ },
+ "mossy_sandstone": {
+  "diff": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/mossy_sandstone/mossy_sandstone_diff_1k.jpg",
+  "nor": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/mossy_sandstone/mossy_sandstone_nor_gl_1k.jpg",
+  "rough": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/mossy_sandstone/mossy_sandstone_rough_1k.jpg"
+ },
+ "old_sandstone_02": {
+  "diff": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/old_sandstone_02/old_sandstone_02_diff_1k.jpg",
+  "nor": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/old_sandstone_02/old_sandstone_02_nor_gl_1k.jpg",
+  "rough": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/old_sandstone_02/old_sandstone_02_rough_1k.jpg"
+ },
+ "weathered_planks": {
+  "diff": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/weathered_planks/weathered_planks_diff_1k.jpg",
+  "nor": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/weathered_planks/weathered_planks_nor_gl_1k.jpg",
+  "rough": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/weathered_planks/weathered_planks_rough_1k.jpg"
+ }
+}

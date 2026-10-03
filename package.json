@@ -1,6 +1,6 @@
 {
   "name": "hollowtide",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Camel Studios",
   "description": "Hollowtide: when the tide drains, the sunken ruins are yours for two minutes. A Camel Studios game.",
   "main": "electron/main.js",
@@ -10,7 +10,9 @@
     "serve": "node tools/serve.js 5190",
     "icon": "electron tools/make-icon.js",
     "build": "electron-builder --win --publish never",
-    "web": "node tools/web-build.js"
+    "web": "node tools/web-build.js",
+    "postinstall": "node tools/vendor.js",
+    "prebuild": "node tools/vendor.js"
   },
   "dependencies": {
     "peerjs": "^1.5.4",
@@ -29,12 +31,21 @@
       "src/**/*",
       "vendor/**/*",
       "assets/icon.png",
+      "assets/tex/*.jpg",
+      "assets/models/*.glb",
+      "assets/sfx/**/*",
+      "assets/env/*.hdr",
       "index.html",
       "node_modules/three/build/three.module.js",
       "node_modules/peerjs/dist/peerjs.min.js",
       "package.json"
     ],
-    "win": { "target": ["nsis"], "icon": "assets/icon.ico" },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/icon.ico"
+    },
     "nsis": {
       "oneClick": true,
       "perMachine": false,

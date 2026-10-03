@@ -7,7 +7,7 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const target = path.resolve(process.argv[2] || 'D:/Projects/Camells1.github.io/play/hollowtide');
 const { version } = require('../package.json');
-const copy = ['index.html', 'src', 'vendor', 'assets/icon.png', 'node_modules/three/build/three.module.js', 'node_modules/peerjs/dist/peerjs.min.js'];
+const copy = ['index.html', 'src', 'vendor', 'assets/icon.png', 'assets/tex', 'assets/models', 'assets/sfx', 'assets/env', 'node_modules/three/build/three.module.js', 'node_modules/peerjs/dist/peerjs.min.js'];
 
 fs.rmSync(target, { recursive: true, force: true });
 for (const rel of copy) {

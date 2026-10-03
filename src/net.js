@@ -2,7 +2,7 @@
 // everyone simulates their own diver. Star layout: guests talk to the host, the host relays.
 import { VERSION } from './config.js';
 
-const PREFIX = 'hollowtide-v1-';
+const PREFIX = 'hollowtide-v2-';
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ICE = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }, { urls: 'stun:stun.cloudflare.com:3478' }] };
 const TIMEOUT = 10000;
