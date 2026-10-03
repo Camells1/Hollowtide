@@ -22,6 +22,7 @@ import { Input } from './input.js';
 import { Hud } from './hud.js';
 import { sfx, unlock, setVolume, setMusicVolume, audioContext, updateAudio } from './audio.js';
 import { clamp, lerp, esc } from './util.js';
+import { clean, ok } from './filter.js';
 
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const IS_ELECTRON = navigator.userAgent.includes('Electron');
@@ -169,7 +170,7 @@ function addRemote(id, p) {
   if (G.remotes.has(id)) return;
   const char = new Character(p.outfit ?? 1);
   scene.add(char.root);
-  G.remotes.set(id, { name: p.name || 'Diver', outfit: p.outfit, peerId: p.peerId, char, x: 0, y: -100, z: 0, yaw: 0, sp: 0, f: 0, s: 0, sw: 0, gr: true, dead: false, under: false, tx: 0, ty: -100, tz: 0 });
+  G.remotes.set(id, { name: clean(p.name || 'Diver'), outfit: p.outfit, peerId: p.peerId, char, x: 0, y: -100, z: 0, yaw: 0, sp: 0, f: 0, s: 0, sw: 0, gr: true, dead: false, under: false, tx: 0, ty: -100, tz: 0 });
   G.voice?.addPlayer(id, p.peerId);
 }
 function removeRemote(id) {
@@ -187,7 +188,7 @@ async function hostGame() {
   const roster = {}; // id -> { name, outfit, peerId }
   net.onJoin = (id, hello) => {
     if (!G) { setTimeout(() => net.onJoin(id, hello), 250); return; }
-    const p = { name: String(hello.name || 'Diver').slice(0, 14), outfit: clamp(hello.outfit | 0, 0, OUTFITS.length - 1), peerId: hello.peerId };
+    const p = { name: clean(String(hello.name || 'Diver').slice(0, 14)), outfit: clamp(hello.outfit | 0, 0, OUTFITS.length - 1), peerId: hello.peerId };
     roster[id] = p;
     const players = { h: { name: settings.name, outfit: settings.outfit, peerId: net.peer.id }, ...roster };
     net.sendTo(id, { type: 'welcome', you: id, seed: G.seed, t: G.tide.t, cycle: G.tide.cycle, opened: [...G.loot.chests.values()].filter(c => c.opened).map(c => c.id), players });
@@ -687,6 +688,7 @@ addEventListener('keydown', e => {
 
 function saveName() {
   settings.name = String($('#name').value || 'Diver').replace(/[^\p{L}\p{N} _.-]/gu, '').trim().slice(0, 14) || 'Diver';
+  if (!ok(settings.name)) { settings.name = 'Diver'; $('#name').value = 'Diver'; }
   settings.outfit = +$('#outfit').value || 0;
   saveSettings();
 }

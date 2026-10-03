@@ -1,5 +1,5 @@
 // Tunables for Hollowtide. Times are in seconds, distances in metres.
-export const VERSION = '0.2.0';
+export const VERSION = '0.2.1';
 
 // One tide cycle (about 5 minutes). The ruins are only reachable on foot during LOW.
 export const TIDE = {

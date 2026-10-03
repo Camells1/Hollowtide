@@ -1,6 +1,6 @@
 {
   "name": "hollowtide",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "Camel Studios",
   "description": "Hollowtide: when the tide drains, the sunken ruins are yours for two minutes. A Camel Studios game.",
   "main": "electron/main.js",
