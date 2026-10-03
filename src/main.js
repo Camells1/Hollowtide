@@ -134,6 +134,7 @@ async function hostGame() {
   const roster = {}; // id -> { name, color, peerId }
   let colorIdx = 1;
   net.onJoin = (id, hello) => {
+    if (!G) { setTimeout(() => net.onJoin(id, hello), 250); return; }
     const p = { name: String(hello.name || 'Diver').slice(0, 14), color: COLORS[colorIdx++ % COLORS.length], peerId: hello.peerId };
     roster[id] = p;
     const players = { h: { name: settings.name, color: COLORS[0], peerId: net.peer.id }, ...roster };
@@ -171,7 +172,13 @@ function bindNet(net) {
   });
   net.on('joined', m => addRemote(m.id, m));
   // A player's voice chat id (sent once their mic is set up)
-  net.on('voice', (m, from) => { const r = G?.remotes.get(from); if (!r) return; r.peerId = m.peerId; G.voice?.addPlayer(from, m.peerId); });
+  net.on('voice', (m, from) => {
+    const r = G?.remotes.get(from); if (!r) return;
+    r.peerId = m.peerId; r.voiceReady = true;
+    if (!G.voice) return;
+    G.voice.addPlayer(from, m.peerId, true);
+    if (!m.reply) G.net.sendTo(from, { type: 'voice', peerId: G.net.peer.id, reply: true });
+  });
   net.on('left', m => removeRemote(m.id));
   net.on('tide', m => {
     if (!G) return;
@@ -202,7 +209,7 @@ async function startVoice() {
   const ok = await v.start(G.net.peer, G.myId, settings.voice);
   // Tell everyone our PeerJS id so they can call us
   G.net.send({ type: 'voice', peerId: G.net.peer.id });
-  for (const [id, r] of G.remotes) if (r.peerId) v.addPlayer(id, r.peerId);
+  for (const [id, r] of G.remotes) if (r.peerId) v.addPlayer(id, r.peerId, !!r.voiceReady);
   toast(ok ? (settings.voice === 'open' ? 'Voice chat on (open mic)' : 'Voice chat on: hold V to talk') : 'No microphone found: you can still hear your friends', true, 4000);
 }
 
@@ -283,21 +290,25 @@ function project(x, y, z) {
   return { x: (tmpV.x * 0.5 + 0.5) * innerWidth, y: (-tmpV.y * 0.5 + 0.5) * innerHeight };
 }
 
+const hudCache = new Map();
+function setHTML(sel, html) { if (hudCache.get(sel) === html) return; hudCache.set(sel, html); $(sel).innerHTML = html; }
+function setText(sel, text) { if (hudCache.get(sel) === text) return; hudCache.set(sel, text); $(sel).textContent = text; }
+
 function updateHud() {
   const p = G.player, t = G.tide, ph = t.phase;
   const total = { day: TIDE.day, ebb: TIDE.ebb, low: TIDE.low, flood: TIDE.flood }[ph];
   const ring = $('#tide-ring'), C = 2 * Math.PI * 52;
   ring.style.strokeDasharray = C; ring.style.strokeDashoffset = C * (1 - t.left / total);
   ring.style.stroke = { day: '#8fd3ff', ebb: '#5fd4c6', low: '#ffd166', flood: '#ff6b6b' }[ph];
-  $('#tide-phase').textContent = { day: 'HIGH TIDE', ebb: 'EBBING', low: 'LOW TIDE', flood: 'FLOOD' }[ph];
-  $('#tide-left').textContent = mmss(t.left);
+  setText('#tide-phase', { day: 'HIGH TIDE', ebb: 'EBBING', low: 'LOW TIDE', flood: 'FLOOD' }[ph]);
+  setText('#tide-left', mmss(t.left));
   $('#bar-hp').style.width = (p.hp / PLAYER.health * 100) + '%';
   $('#bar-air').style.width = (p.oxygen / p.maxOxygen * 100) + '%';
   $('#bar-st').style.width = (p.stamina / PLAYER.stamina * 100) + '%';
   $('.bar.air').classList.toggle('low', p.oxygen < p.maxOxygen * 0.3);
-  $('#pack-count').textContent = `${p.packCount}/${p.packSize}`;
-  $('#pack-items').innerHTML = Object.entries(p.pack).filter(([, n]) => n).map(([k, n]) => `<div class="it"><i style="background:${ITEMS[k].color}"></i>${ITEMS[k].name}<b>${n}</b></div>`).join('') || '<div class="it empty">Empty</div>';
-  $('#bank-total').textContent = bankTotal();
+  setText('#pack-count', `${p.packCount}/${p.packSize}`);
+  setHTML('#pack-items', Object.entries(p.pack).filter(([, n]) => n).map(([k, n]) => `<div class="it"><i style="background:${ITEMS[k].color}"></i>${ITEMS[k].name}<b>${n}</b></div>`).join('') || '<div class="it empty">Empty</div>');
+  setText('#bank-total', String(bankTotal()));
   // Markers: the camp, ruin sites (while the tide is out), your dropped packs, friends' names
   const marks = [];
   const add = (x, y, z, label, cls) => { const s = project(x, y, z); if (s && s.x > -50 && s.x < innerWidth + 50) marks.push(`<div class="mk ${cls}" style="left:${s.x}px;top:${s.y}px">${label}</div>`); };
@@ -306,9 +317,9 @@ function updateHud() {
   if (ph === 'ebb' || ph === 'low') for (const s of G.world.sites) { const d = dist(s.x, s.z); if (d > 20) add(s.x, G.world.ground(s.x, s.z) + 8, s.z, `${s.name} ${d}m`, 'site'); }
   for (const b of G.loot.bags) add(b.x, b.y + 2, b.z, `Your pack ${dist(b.x, b.z)}m`, 'bag');
   for (const [id, r] of G.remotes) if (!r.dead) add(r.x, r.y + 2.3, r.z, `${G.voice?.speaking(id) ? '🔊 ' : ''}${esc(r.name)}`, 'friend');
-  $('#markers').innerHTML = marks.join('');
+  setHTML('#markers', marks.join(''));
   // Co-op player list
-  $('#players').innerHTML = G.net ? [`<div class="pl me">${G.voice?.localLevel > 0.03 ? '🎙️ ' : ''}${esc(settings.name)} (you)</div>`, ...[...G.remotes].map(([id, r]) => `<div class="pl">${G.voice?.speaking(id) ? '🔊 ' : ''}${esc(r.name)}${r.dead ? ' ✝' : ''}</div>`)].join('') : '';
+  setHTML('#players', G.net ? [`<div class="pl me">${G.voice?.localLevel > 0.03 ? '🎙️ ' : ''}${esc(settings.name)} (you)</div>`, ...[...G.remotes].map(([id, r]) => `<div class="pl">${G.voice?.speaking(id) ? '🔊 ' : ''}${esc(r.name)}${r.dead ? ' ✝' : ''}</div>`)].join('') : '');
   // Underwater tint and the "low air" vignette
   const camUnder = camera.position.y < G.water.level;
   $('#underwater').classList.toggle('on', camUnder);
@@ -460,7 +471,7 @@ function tick(dt) {
   if (G.voice) {
     G.voice.setTalking(play && !!input.keys.KeyV);
     const players = new Map([...G.remotes].map(([id, r]) => [id, { x: r.x, y: r.y + 1.6, z: r.z, under: r.under }]));
-    G.voice.update({ x: camera.position.x, y: camera.position.y, z: camera.position.z, yaw: G.camYaw + Math.PI, under: p.headUnder }, players, settings.volume);
+    G.voice.update({ x: camera.position.x, y: camera.position.y, z: camera.position.z, yaw: G.camYaw, under: p.headUnder }, players, settings.volume);
   }
 
   // Autosave (single player keeps the tide; everyone keeps their stash and upgrades)
@@ -477,10 +488,10 @@ function interact(dt, play) {
   const ePressed = play && input.hit('KeyE');
   const eHeld = play && !!input.keys.KeyE;
   if (!p.dead) {
-    const bagNear = loot.bags.some(b => Math.hypot(b.x - p.pos.x, b.z - p.pos.z) < 1.6);
+    const bagNear = loot.bags.some(b => Math.hypot(b.x - p.pos.x, b.z - p.pos.z) < 1.6 && Math.abs(b.y - p.pos.y) < 2);
     if (bagNear) {
       prompt = '<kbd>E</kbd> Pick up your pack';
-      if (ePressed) { const items = loot.takeBag(p.pos), left = {}; for (const [k, n] of Object.entries(items || {})) { const got = p.addItem(k, n); if (got < n) left[k] = n - got; } if (Object.keys(left).length) loot.dropBag(p.pos, left); sfx.pickup(); toast('Got your pack back!', true); }
+      if (ePressed) { const items = loot.takeBag(p.pos), left = {}; if (items) { for (const [k, n] of Object.entries(items)) { const got = p.addItem(k, n); if (got < n) left[k] = n - got; } if (Object.keys(left).length) loot.dropBag(p.pos, left); sfx.pickup(); toast('Got your pack back!', true); } }
     } else if (near(world.stash, 2.6)) {
       prompt = `<kbd>E</kbd> Stash your loot (${p.packCount})`;
       if (ePressed) bankPack();
@@ -507,7 +518,7 @@ function interact(dt, play) {
       } else G.channel = null;
     }
   }
-  $('#prompt').innerHTML = prompt;
+  setHTML('#prompt', prompt);
   $('#prompt').classList.toggle('on', !!prompt);
   $('#channel').classList.toggle('on', !!G.channel);
   if (G.channel) $('#channel i').style.width = (G.channel.t / 1.2 * 100) + '%';

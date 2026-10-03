@@ -56,7 +56,7 @@ export class Character {
 
   // s: { speed (m/s), swim (0..1), grounded, dead, yaw }
   update(dt, s) {
-    this.root.rotation.y = s.yaw;
+    this.root.rotation.y = s.yaw + Math.PI; // the model is built facing +Z; yaw faces -Z
     const sp = Math.min(1, s.speed / 6);
     this.phase += dt * (3 + s.speed * 1.6);
     const ph = this.phase, sw = Math.sin(ph), swim = s.swim || 0;

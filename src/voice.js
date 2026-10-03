@@ -32,12 +32,13 @@ export class Voice {
     }
     this._applyMic();
     this.pending = new Map(); // calls from players we haven't been told about yet (by PeerJS id)
-    peer.on('call', call => {
+    this._onCall = call => {
       const from = [...this.peerIds].find(([, pid]) => pid === call.peer)?.[0];
       if (!from) { this.pending.set(call.peer, call); setTimeout(() => { if (this.pending.get(call.peer) === call) { this.pending.delete(call.peer); call.close(); } }, 8000); return; }
       call.answer(this.local);
       this._attach(from, call);
-    });
+    };
+    peer.on('call', this._onCall);
     return this.micOk;
   }
 
@@ -46,14 +47,15 @@ export class Voice {
   _applyMic() { const on = this.mode === 'open' || this.talking; for (const t of this.local?.getAudioTracks() || []) t.enabled = on; }
   get transmitting() { return this.micOk && (this.mode === 'open' || this.talking); }
 
-  // A player joined (or we learned their PeerJS id): the side with the smaller id places the call
-  addPlayer(playerId, peerId) {
+  // Learn a player's PeerJS id. Once their voice is ready too, the side with the smaller id places the call
+  // (calling before the other side listens would be silently lost).
+  addPlayer(playerId, peerId, ready = false) {
     if (!peerId || playerId === this.myPlayerId) return;
     this.peerIds.set(playerId, peerId);
     if (!this.peer || this.remotes.has(playerId)) return;
     const waiting = this.pending?.get(peerId);
     if (waiting) { this.pending.delete(peerId); waiting.answer(this.local); this._attach(playerId, waiting); return; }
-    if (this.peer.id < peerId) {
+    if (ready && this.peer.id < peerId) {
       const call = this.peer.call(peerId, this.local);
       if (call) this._attach(playerId, call);
     }
@@ -118,6 +120,8 @@ export class Voice {
 
   stop() {
     for (const id of [...this.remotes.keys()]) this.removePlayer(id);
+    if (this.peer && this._onCall) this.peer.off('call', this._onCall);
+    for (const c of this.pending?.values() || []) { try { c.close(); } catch (_) {} }
     for (const t of this.local?.getTracks() || []) t.stop();
     try { this.ctx?.close(); } catch (_) {}
     this.ctx = null; this.local = null; this.peer = null;

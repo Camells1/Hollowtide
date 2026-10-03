@@ -161,7 +161,7 @@ export class World {
     const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.6, 10, 1, false, 0, Math.PI), darkWood); lid.rotation.z = Math.PI / 2; lid.position.y = 0.9; stash.add(lid);
     for (const s of [-0.55, 0.55]) { const band = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.42, 1.04), brass); band.position.set(s, 0.62, 0); stash.add(band); }
     this.stash = place(stash, -4.5, 1.5, 0.4);
-    this.colliders.push({ x: this.stash.x, z: this.stash.z, r: 1.0, top: 1.4 });
+    this.colliders.push({ x: this.stash.x, z: this.stash.z, r: 1.0, top: g(this.stash.x, this.stash.z) + 1.4 });
 
     const bench = new THREE.Group();
     const topB = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.18, 1.1), woodMat); topB.position.y = 1.0; topB.castShadow = true; bench.add(topB);
@@ -169,14 +169,14 @@ export class World {
     const anvil = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.3, 0.35), brass); anvil.position.set(0.5, 1.25, 0); bench.add(anvil);
     const saw = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.25), new THREE.MeshStandardMaterial({ color: 0xc8ccd0, metalness: 0.8, roughness: 0.3 })); saw.position.set(-0.5, 1.12, 0); bench.add(saw);
     this.bench = place(bench, 4.5, -2, -0.6);
-    this.colliders.push({ x: this.bench.x, z: this.bench.z, r: 1.2, top: 1.4 });
+    this.colliders.push({ x: this.bench.x, z: this.bench.z, r: 1.2, top: g(this.bench.x, this.bench.z) + 1.4 });
 
     // A small hut for atmosphere
     const hut = new THREE.Group();
     const walls = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.6, 2.4, 8), woodMat); walls.position.y = 1.2; walls.castShadow = true; hut.add(walls);
     const roof = new THREE.Mesh(new THREE.ConeGeometry(3.4, 2.4, 8), new THREE.MeshStandardMaterial({ color: 0xc9a85a, roughness: 1, flatShading: true })); roof.position.y = 3.5; roof.castShadow = true; hut.add(roof);
     const hp = place(hut, -3, -7, 0.3);
-    this.colliders.push({ x: hp.x, z: hp.z, r: 2.7, top: 5 });
+    this.colliders.push({ x: hp.x, z: hp.z, r: 2.7, top: g(hp.x, hp.z) + 5 });
     camp.spawn = [camp.x + 2.5, camp.z + 3.5];
   }
 

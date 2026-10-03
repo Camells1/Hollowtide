@@ -72,9 +72,10 @@ export class Player {
     if (inWater && !swimming) speed *= 0.7; // wading
 
     // Stamina: sprinting and treading water at the surface both cost it
-    const surfaceSwim = swimming && !this.headUnder;
-    const drain = (sprinting ? 16 : 0) + (surfaceSwim && env.highTide ? 3.5 : 0);
-    this.stamina = clamp(this.stamina + (drain > 0 ? -drain : 22) * dt, 0, PLAYER.stamina);
+    // Open water at high tide wears you out; you only get your breath back on land
+    const drain = (sprinting ? 16 : 0) + (swimming && env.highTide ? 3.5 : 0);
+    const regen = swimming && env.highTide ? 0 : 22;
+    this.stamina = clamp(this.stamina + (drain > 0 ? -drain : regen) * dt, 0, PLAYER.stamina);
 
     // Horizontal velocity eases toward the wish direction
     const accel = swimming ? 4 : this.grounded ? 14 : 3;
@@ -85,7 +86,7 @@ export class Player {
     if (swimming) {
       // Float up to just below the surface unless diving; Space swims up, C dives
       const rest = level - 1.25;
-      let vy = (rest - this.pos.y) * 1.8;
+      let vy = clamp((rest - this.pos.y) * 1.8, -3, 2.2); // gentle: surfacing from deep takes time
       if (input.jump) vy = 2.6;
       if (input.dive) vy = -2.6;
       if (this.stamina <= 0 && env.highTide) vy = -0.8;   // exhausted: you start to sink
